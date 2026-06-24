@@ -113,8 +113,12 @@ generate_wayland_protocol_headers "$UPSTREAM_SRC" "$AGGREGATE_DIR/include"
 # Keep parity with files historically excluded in go-gl vendoring scripts.
 rm -f "$AGGREGATE_DIR"/src/CMakeLists.txt "$AGGREGATE_DIR"/src/*.in
 
+# NOTE: the trendvidia fork flattens the upstream v3.x/glfw/glfw layout to the
+# repository root (module github.com/trendvidia/glfw, C tree under ./glfw).
+# This script still assumes the upstream subdirectory layout and must be
+# reworked for the flat layout before the next upstream C re-sync.
 GLFW_DIR="$TARGET_DIR/glfw/glfw"
 rm -rf "$GLFW_DIR"
 mv "$AGGREGATE_DIR" "$GLFW_DIR"
 
-generate_dummy_go_files "$GLFW_DIR" "github.com/go-gl/glfw/$TARGET_DIR/glfw/glfw/deps"
+generate_dummy_go_files "$GLFW_DIR" "github.com/trendvidia/glfw/glfw/deps"

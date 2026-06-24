@@ -1,3 +1,3 @@
-module github.com/go-gl/glfw
+module github.com/trendvidia/glfw
 
 go 1.19
