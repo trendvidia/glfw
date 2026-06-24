@@ -1,22 +1,39 @@
 #!/usr/bin/env bash
 
-# Generate vendored GLFW C sources for a specific go-gl target directory.
+# Regenerate the vendored GLFW C sources at the repository root.
+#
+# This fork (module github.com/trendvidia/glfw) flattens the upstream go-gl
+# v3.x/glfw/glfw layout: the C tree lives in ./glfw and the binding package is
+# the repository root, so this script no longer takes a target-directory
+# argument.
+#
 # Example:
-#   scripts/generate-buildable-source-code.sh v3.4 "$(cat v3.4/glfw/GLFW_C_REVISION.txt)"
+#   scripts/generate-buildable-source-code.sh                 # use pinned revision
+#   scripts/generate-buildable-source-code.sh <glfw_revision> # bump to a revision
+#
+# WARNING: this regenerates pristine upstream GLFW C. It does NOT carry the
+# IME/preedit patches (ported from glfw/glfw#2130) — those must be reapplied
+# afterwards (e.g. from a maintained patch series) or they will be lost.
 
 set -euo pipefail
 
 EXEC="$0"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REVISION_FILE="$REPO_ROOT/GLFW_C_REVISION.txt"
 
 usage() {
-    echo "usage: $EXEC <go_gl_target_dir> <glfw_revision>"
+    echo "usage: $EXEC [glfw_revision]"
+    echo "  glfw_revision defaults to the contents of $REVISION_FILE"
     exit "$1"
 }
 
-TARGET_DIR="${1:-}"
-GLFW_REVISION="${2:-}"
-if [ -z "$TARGET_DIR" ] || [ -z "$GLFW_REVISION" ]; then
-    usage 1
+GLFW_REVISION="${1:-}"
+if [ -z "$GLFW_REVISION" ]; then
+    if [ -r "$REVISION_FILE" ]; then
+        GLFW_REVISION="$(cat "$REVISION_FILE")"
+    else
+        usage 1
+    fi
 fi
 
 TMP_DIR="$(mktemp -d)"
@@ -80,6 +97,8 @@ generate_wayland_protocol_headers() {
         fractional-scale-v1.xml
         xdg-activation-v1.xml
         xdg-decoration-unstable-v1.xml
+        # Fork-specific protocols (not shipped by upstream GLFW); overlaid onto
+        # the upstream tree from scripts/fork-wayland-protocols before scanning.
         text-input-unstable-v1.xml
         text-input-unstable-v3.xml
     )
@@ -102,6 +121,16 @@ AGGREGATE_DIR="$WORK_DIR/glfw-aggregate"
 mkdir -p "$UPSTREAM_SRC"
 curl -fsSL "https://github.com/glfw/glfw/archive/${GLFW_REVISION}.tar.gz" |
     tar xz --strip-components=1 --directory="$UPSTREAM_SRC"
+
+# Overlay fork-specific Wayland protocols that upstream GLFW does not ship (the
+# IME text-input protocols from glfw/glfw#2130). They are vendored into the
+# regenerated deps/wayland tree and their client-protocol headers are generated
+# alongside upstream's below.
+FORK_PROTOCOLS_DIR="$REPO_ROOT/scripts/fork-wayland-protocols"
+if [ -d "$FORK_PROTOCOLS_DIR" ]; then
+    cp "$FORK_PROTOCOLS_DIR"/*.xml "$UPSTREAM_SRC/deps/wayland/"
+fi
+
 mkdir -p "$AGGREGATE_DIR/include"
 
 cp -r "$UPSTREAM_SRC/src" "$AGGREGATE_DIR/src"
@@ -113,12 +142,11 @@ generate_wayland_protocol_headers "$UPSTREAM_SRC" "$AGGREGATE_DIR/include"
 # Keep parity with files historically excluded in go-gl vendoring scripts.
 rm -f "$AGGREGATE_DIR"/src/CMakeLists.txt "$AGGREGATE_DIR"/src/*.in
 
-# NOTE: the trendvidia fork flattens the upstream v3.x/glfw/glfw layout to the
-# repository root (module github.com/trendvidia/glfw, C tree under ./glfw).
-# This script still assumes the upstream subdirectory layout and must be
-# reworked for the flat layout before the next upstream C re-sync.
-GLFW_DIR="$TARGET_DIR/glfw/glfw"
+GLFW_DIR="$REPO_ROOT/glfw"
 rm -rf "$GLFW_DIR"
 mv "$AGGREGATE_DIR" "$GLFW_DIR"
 
 generate_dummy_go_files "$GLFW_DIR" "github.com/trendvidia/glfw/glfw/deps"
+
+# Record the revision the tree was regenerated from.
+printf '%s\n' "$GLFW_REVISION" > "$REVISION_FILE"
