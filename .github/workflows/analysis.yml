@@ -6,10 +6,6 @@ permissions:
 jobs:
   static_analysis:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        module-dir: ['v3.3/glfw', 'v3.4/glfw']
 
     steps:
     - uses: actions/checkout@v4
@@ -28,17 +24,13 @@ jobs:
       run: sudo apt-get update && sudo apt-get install gcc libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev libx11-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
 
     - name: Vet
-      run: |
-        cd "${{ matrix.module-dir }}" && go vet ./...
+      run: go vet ./...
 
     - name: Formatting
-      run: |
-        cd "${{ matrix.module-dir }}" && test -z "$(gofmt -e -d . | tee /dev/stderr)"
+      run: test -z "$(gofmt -e -d . | tee /dev/stderr)"
 
     - name: Gocyclo
-      run: |
-        cd "${{ matrix.module-dir }}" && gocyclo -over 30 .
+      run: gocyclo -over 30 .
 
     - name: Staticcheck
-      run: |
-        cd "${{ matrix.module-dir }}" && staticcheck ./...
+      run: staticcheck ./...
