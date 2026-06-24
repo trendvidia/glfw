@@ -36,6 +36,14 @@ void glfwSetDropCallbackCB(GLFWwindow *window) {
   glfwSetDropCallback(window, (GLFWdropfun)goDropCB);
 }
 
+void glfwSetPreeditCallbackCB(GLFWwindow *window) {
+  glfwSetPreeditCallback(window, (GLFWpreeditfun)goPreeditCB);
+}
+
+void glfwSetIMEStatusCallbackCB(GLFWwindow *window) {
+  glfwSetIMEStatusCallback(window, (GLFWimestatusfun)goIMEStatusCB);
+}
+
 float GetAxisAtIndex(float *axis, int i) { return axis[i]; }
 
 unsigned char GetButtonsAtIndex(unsigned char *buttons, int i) {

@@ -80,6 +80,8 @@ generate_wayland_protocol_headers() {
         fractional-scale-v1.xml
         xdg-activation-v1.xml
         xdg-decoration-unstable-v1.xml
+        text-input-unstable-v1.xml
+        text-input-unstable-v3.xml
     )
 
     for protocol in "${protocol_files[@]}"; do

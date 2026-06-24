@@ -12,6 +12,8 @@ package glfw
 //void glfwSetCursorEnterCallbackCB(GLFWwindow *window);
 //void glfwSetScrollCallbackCB(GLFWwindow *window);
 //void glfwSetDropCallbackCB(GLFWwindow *window);
+//void glfwSetPreeditCallbackCB(GLFWwindow *window);
+//void glfwSetIMEStatusCallbackCB(GLFWwindow *window);
 //float GetAxisAtIndex(float *axis, int i);
 //unsigned char GetButtonsAtIndex(unsigned char *buttons, int i);
 //float GetGamepadAxisAtIndex(GLFWgamepadstate *gp, int i);
@@ -313,6 +315,7 @@ const (
 	StickyMouseButtonsMode InputMode = C.GLFW_STICKY_MOUSE_BUTTONS // Value can be either 1 or 0
 	LockKeyMods            InputMode = C.GLFW_LOCK_KEY_MODS        // Value can be either 1 or 0
 	RawMouseMotion         InputMode = C.GLFW_RAW_MOUSE_MOTION     // Value can be either 1 or 0
+	IMEMode                InputMode = C.GLFW_IME                  // Value can be either 1 or 0
 )
 
 // Cursor mode values.
@@ -390,6 +393,33 @@ func goDropCB(window unsafe.Pointer, count C.int, names **C.char) { // TODO: The
 	w.fDropHolder(w, namesSlice)
 }
 
+//export goPreeditCB
+func goPreeditCB(window unsafe.Pointer, preeditCount C.int, preeditString *C.uint, blockCount C.int, blockSizes *C.int, focusedBlock C.int, caret C.int) {
+	w := windows.get((*C.GLFWwindow)(window))
+
+	text := make([]rune, int(preeditCount))
+	if preeditCount > 0 {
+		for i, c := range unsafe.Slice(preeditString, int(preeditCount)) {
+			text[i] = rune(c)
+		}
+	}
+
+	blocks := make([]int, int(blockCount))
+	if blockCount > 0 {
+		for i, b := range unsafe.Slice(blockSizes, int(blockCount)) {
+			blocks[i] = int(b)
+		}
+	}
+
+	w.fPreeditHolder(w, text, blocks, int(focusedBlock), int(caret))
+}
+
+//export goIMEStatusCB
+func goIMEStatusCB(window unsafe.Pointer) {
+	w := windows.get((*C.GLFWwindow)(window))
+	w.fIMEStatusHolder(w)
+}
+
 // GetInputMode returns the value of an input option of the window.
 func (w *Window) GetInputMode(mode InputMode) int {
 	ret := int(C.glfwGetInputMode(w.data, C.int(mode)))
@@ -400,7 +430,7 @@ func (w *Window) GetInputMode(mode InputMode) int {
 // SetInputMode sets an input option for the window.
 func (w *Window) SetInputMode(mode InputMode, value int) {
 	C.glfwSetInputMode(w.data, C.int(mode), C.int(value))
-	if mode == CursorMode || mode == RawMouseMotion {
+	if mode == CursorMode || mode == RawMouseMotion || mode == IMEMode {
 		if err := acceptError(featureUnavailable, featureUnimplemented); err != nil {
 			return
 		}
@@ -975,4 +1005,73 @@ func (joy Joystick) GetGamepadState() *GamepadState {
 	}
 
 	return &gs
+}
+
+// PreeditCallback is the callback for preedit (IME composition) text.
+//
+// preeditString is the full composing text as runes. blockSizes partitions
+// preeditString into highlight blocks (the sum of blockSizes equals
+// len(preeditString)); focusedBlock is the index into blockSizes of the block
+// currently focused by the IME (or -1 if none). caret is the cursor position
+// within preeditString, in runes. An empty preeditString signals that the
+// composition has been committed or cancelled.
+type PreeditCallback func(w *Window, preeditString []rune, blockSizes []int, focusedBlock int, caret int)
+
+// SetPreeditCallback sets the preedit callback of the window, which is called
+// whenever the composing (preedit) text of the Input Method Editor changes.
+//
+// This is the desktop counterpart used to drive inline IME composition. Use it
+// together with SetPreeditCursorRectangle to position the candidate window and
+// SetIMEStatusCallback to track IME on/off changes.
+func (w *Window) SetPreeditCallback(cbfun PreeditCallback) (previous PreeditCallback) {
+	previous = w.fPreeditHolder
+	w.fPreeditHolder = cbfun
+	if cbfun == nil {
+		C.glfwSetPreeditCallback(w.data, nil)
+	} else {
+		C.glfwSetPreeditCallbackCB(w.data)
+	}
+	panicError()
+	return previous
+}
+
+// IMEStatusCallback is the callback for IME on/off status changes.
+type IMEStatusCallback func(w *Window)
+
+// SetIMEStatusCallback sets the IME status callback of the window, which is
+// called whenever the IME is switched on or off. Query the current state with
+// GetInputMode(IMEMode).
+func (w *Window) SetIMEStatusCallback(cbfun IMEStatusCallback) (previous IMEStatusCallback) {
+	previous = w.fIMEStatusHolder
+	w.fIMEStatusHolder = cbfun
+	if cbfun == nil {
+		C.glfwSetIMEStatusCallback(w.data, nil)
+	} else {
+		C.glfwSetIMEStatusCallbackCB(w.data)
+	}
+	panicError()
+	return previous
+}
+
+// SetPreeditCursorRectangle notifies the IME where the text cursor is so that
+// the candidate window can be positioned. The rectangle is given in window
+// content coordinates (pixels), with the origin at the upper-left corner.
+func (w *Window) SetPreeditCursorRectangle(x, y, width, height int) {
+	C.glfwSetPreeditCursorRectangle(w.data, C.int(x), C.int(y), C.int(width), C.int(height))
+	panicError()
+}
+
+// GetPreeditCursorRectangle returns the preedit cursor rectangle previously set
+// with SetPreeditCursorRectangle, in window content coordinates.
+func (w *Window) GetPreeditCursorRectangle() (x, y, width, height int) {
+	var cx, cy, cw, ch C.int
+	C.glfwGetPreeditCursorRectangle(w.data, &cx, &cy, &cw, &ch)
+	panicError()
+	return int(cx), int(cy), int(cw), int(ch)
+}
+
+// ResetPreeditText resets (clears) the current IME composition text.
+func (w *Window) ResetPreeditText() {
+	C.glfwResetPreeditText(w.data)
+	panicError()
 }
