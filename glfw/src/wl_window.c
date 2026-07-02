@@ -2152,6 +2152,12 @@ static void textInputV3Enter(void* data,
                              struct zwp_text_input_v3* textInputV3,
                              struct wl_surface* surface)
 {
+    _GLFWwindow* window = (_GLFWwindow*) data;
+
+    // The enable request resets all compositor-side text-input state, so the
+    // cursor rectangle must be re-sent afterwards even when unchanged.
+    window->wl.textInputV3Context.cursorRectSent = GLFW_FALSE;
+
     zwp_text_input_v3_enable(textInputV3);
     zwp_text_input_v3_commit(textInputV3);
 }
@@ -2192,6 +2198,10 @@ static void textInputV3PreeditString(void* data,
     _GLFWpreedit* preedit = &window->preedit;
     const char* cur = text;
     unsigned int cursorLength = 0;
+
+    // Mark the pending state so the next done event forwards it to the
+    // application; done events that carry no preedit change stay silent.
+    window->wl.textInputV3Context.preeditChanged = GLFW_TRUE;
 
     preedit->textCount = 0;
     preedit->blockSizesCount = 0;
@@ -2289,7 +2299,18 @@ static void textInputV3Done(void* data,
 {
     _GLFWwindow* window = (_GLFWwindow*) data;
     _glfwUpdatePreeditCursorRectangleWayland(window);
-    _glfwInputPreedit(window);
+
+    // The compositor acknowledges every commit — including our own
+    // cursor-rectangle updates above — with a done event. Forwarding the
+    // preedit on each of those re-delivers a stale (usually empty) preedit
+    // to the application once per round-trip, ~60Hz while a text field is
+    // focused (trendvidia/fyne#414). Only forward when this transaction
+    // actually carried a preedit_string event.
+    if (window->wl.textInputV3Context.preeditChanged)
+    {
+        window->wl.textInputV3Context.preeditChanged = GLFW_FALSE;
+        _glfwInputPreedit(window);
+    }
 }
 
 static const struct zwp_text_input_v3_listener textInputV3Listener =
@@ -3621,6 +3642,25 @@ void _glfwUpdatePreeditCursorRectangleWayland(_GLFWwindow* window)
 
     if (window->wl.textInputV3)
     {
+        // Skip the commit when the rectangle is unchanged: the compositor
+        // answers every commit with a done event, whose handler calls back
+        // into this function — re-sending unconditionally turns that into a
+        // permanent commit/done feedback loop, one round-trip per frame
+        // (trendvidia/fyne#414).
+        if (window->wl.textInputV3Context.cursorRectSent &&
+            x == window->wl.textInputV3Context.lastCursorX &&
+            y == window->wl.textInputV3Context.lastCursorY &&
+            w == window->wl.textInputV3Context.lastCursorWidth &&
+            h == window->wl.textInputV3Context.lastCursorHeight)
+        {
+            return;
+        }
+        window->wl.textInputV3Context.cursorRectSent = GLFW_TRUE;
+        window->wl.textInputV3Context.lastCursorX = x;
+        window->wl.textInputV3Context.lastCursorY = y;
+        window->wl.textInputV3Context.lastCursorWidth = w;
+        window->wl.textInputV3Context.lastCursorHeight = h;
+
         zwp_text_input_v3_set_cursor_rectangle(window->wl.textInputV3, x, y, w, h);
         zwp_text_input_v3_commit(window->wl.textInputV3);
     }

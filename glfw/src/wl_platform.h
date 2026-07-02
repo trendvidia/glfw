@@ -420,6 +420,12 @@ typedef struct _GLFWwindowWayland
         char* preeditText;
         char* commitTextOnReset;
     } textInputV1Context;
+    struct {
+        GLFWbool preeditChanged;
+        GLFWbool cursorRectSent;
+        int      lastCursorX, lastCursorY;
+        int      lastCursorWidth, lastCursorHeight;
+    } textInputV3Context;
 } _GLFWwindowWayland;
 
 // Wayland-specific global data

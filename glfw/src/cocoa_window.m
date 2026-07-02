@@ -2001,7 +2001,12 @@ void _glfwResetPreeditTextCocoa(_GLFWwindow* window)
 {
     @autoreleasepool {
 
-    NSTextInputContext* context = [NSTextInputContext currentInputContext];
+    // Use the view's own input context, not +currentInputContext: when this
+    // is called on focus loss (the main use), the current context already
+    // belongs to the newly focused window/app, so discarding there is a no-op
+    // and the input method keeps its composition state — resurrecting the
+    // "cancelled" text when composition resumes (trendvidia/fyne#413).
+    NSTextInputContext* context = [window->ns.view inputContext];
     [context discardMarkedText];
     [window->ns.view unmarkText];
 
