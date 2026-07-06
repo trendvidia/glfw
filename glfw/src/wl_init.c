@@ -469,6 +469,9 @@ GLFWbool _glfwConnectWayland(int platformID, _GLFWplatform* platform)
         .getKeyScancode = _glfwGetKeyScancodeWayland,
         .setClipboardString = _glfwSetClipboardStringWayland,
         .getClipboardString = _glfwGetClipboardStringWayland,
+        .setClipboardData = _glfwSetClipboardDataWayland,
+        .getClipboardData = _glfwGetClipboardDataWayland,
+        .getClipboardTargets = _glfwGetClipboardTargetsWayland,
         .updatePreeditCursorRectangle = _glfwUpdatePreeditCursorRectangleWayland,
         .resetPreeditText = _glfwResetPreeditTextWayland,
         .setIMEStatus = _glfwSetIMEStatusWayland,
@@ -967,7 +970,12 @@ void _glfwTerminateWayland(void)
     }
 
     for (unsigned int i = 0; i < _glfw.wl.offerCount; i++)
+    {
         wl_data_offer_destroy(_glfw.wl.offers[i].offer);
+        for (unsigned int j = 0;  j < _glfw.wl.offers[i].mimeTypeCount;  j++)
+            _glfw_free(_glfw.wl.offers[i].mimeTypes[j]);
+        _glfw_free(_glfw.wl.offers[i].mimeTypes);
+    }
 
     _glfw_free(_glfw.wl.offers);
 
@@ -1029,6 +1037,16 @@ void _glfwTerminateWayland(void)
         close(_glfw.wl.cursorTimerfd);
 
     _glfw_free(_glfw.wl.clipboardString);
+    _glfwFreeClipboardFlavors(&_glfw.wl.clipboardFlavors,
+                              &_glfw.wl.clipboardFlavorCount);
+    for (unsigned int i = 0;  i < _glfw.wl.selectionMimeCount;  i++)
+        _glfw_free(_glfw.wl.selectionMimes[i]);
+    _glfw_free(_glfw.wl.selectionMimes);
+    _glfw.wl.selectionMimes = NULL;
+    _glfw.wl.selectionMimeCount = 0;
+    _glfwFreeClipboardTargetsResultWayland();
+    _glfw_free(_glfw.wl.clipboardDataResult);
+    _glfw.wl.clipboardDataResult = NULL;
 }
 
 #endif // _GLFW_WAYLAND

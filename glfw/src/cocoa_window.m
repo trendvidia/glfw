@@ -1991,6 +1991,26 @@ const char* _glfwGetClipboardStringCocoa(void)
     } // autoreleasepool
 }
 
+void _glfwSetClipboardDataCocoa(const GLFWclipboardflavor* flavors, int count)
+{
+    _glfwInputError(GLFW_FEATURE_UNAVAILABLE,
+                    "Cocoa: Clipboard data flavors are not implemented; use the native clipboard API");
+}
+
+const unsigned char* _glfwGetClipboardDataCocoa(const char* mimeType, size_t* size)
+{
+    _glfwInputError(GLFW_FEATURE_UNAVAILABLE,
+                    "Cocoa: Clipboard data flavors are not implemented; use the native clipboard API");
+    return NULL;
+}
+
+const char** _glfwGetClipboardTargetsCocoa(int* count)
+{
+    _glfwInputError(GLFW_FEATURE_UNAVAILABLE,
+                    "Cocoa: Clipboard data flavors are not implemented; use the native clipboard API");
+    return NULL;
+}
+
 void _glfwUpdatePreeditCursorRectangleCocoa(_GLFWwindow* window)
 {
     // Do nothing. Instead, implement `firstRectForCharacterRange` callback

@@ -541,6 +541,10 @@ void _glfwSetCursorNull(_GLFWwindow* window, _GLFWcursor* cursor)
 void _glfwSetClipboardStringNull(const char* string)
 {
     char* copy = _glfw_strdup(string);
+    _glfwFreeClipboardFlavors(&_glfw.null.clipboardFlavors,
+                              &_glfw.null.clipboardFlavorCount);
+    _glfw_free(_glfw.null.clipboardTargets);
+    _glfw.null.clipboardTargets = NULL;
     _glfw_free(_glfw.null.clipboardString);
     _glfw.null.clipboardString = copy;
 }
@@ -548,6 +552,76 @@ void _glfwSetClipboardStringNull(const char* string)
 const char* _glfwGetClipboardStringNull(void)
 {
     return _glfw.null.clipboardString;
+}
+
+void _glfwSetClipboardDataNull(const GLFWclipboardflavor* flavors, int count)
+{
+    _glfwFreeClipboardFlavors(&_glfw.null.clipboardFlavors,
+                              &_glfw.null.clipboardFlavorCount);
+    _glfw_free(_glfw.null.clipboardTargets);
+    _glfw.null.clipboardTargets = NULL;
+    _glfw_free(_glfw.null.clipboardString);
+    _glfw.null.clipboardString = NULL;
+
+    if (!_glfwCopyClipboardFlavors(flavors, count,
+                                   &_glfw.null.clipboardFlavors,
+                                   &_glfw.null.clipboardFlavorCount))
+        return;
+
+    const _GLFWclipboardFlavor* text =
+        _glfwFindClipboardFlavor(_glfw.null.clipboardFlavors,
+                                 _glfw.null.clipboardFlavorCount,
+                                 "text/plain;charset=utf-8");
+    if (text)
+    {
+        char* string = _glfw_calloc(text->size + 1, 1);
+        if (string)
+        {
+            memcpy(string, text->data, text->size);
+            _glfw.null.clipboardString = string;
+        }
+    }
+}
+
+const unsigned char* _glfwGetClipboardDataNull(const char* mimeType, size_t* size)
+{
+    const _GLFWclipboardFlavor* flavor =
+        _glfwFindClipboardFlavor(_glfw.null.clipboardFlavors,
+                                 _glfw.null.clipboardFlavorCount,
+                                 mimeType);
+    if (!flavor)
+    {
+        _glfwInputError(GLFW_FORMAT_UNAVAILABLE,
+                        "Null: Clipboard flavor %s unavailable", mimeType);
+        return NULL;
+    }
+
+    *size = flavor->size;
+    return flavor->data;
+}
+
+const char** _glfwGetClipboardTargetsNull(int* count)
+{
+    _glfw_free(_glfw.null.clipboardTargets);
+    _glfw.null.clipboardTargets = NULL;
+
+    if (!_glfw.null.clipboardFlavorCount)
+        return NULL;
+
+    const char** targets = _glfw_calloc(_glfw.null.clipboardFlavorCount,
+                                        sizeof(const char*));
+    if (!targets)
+    {
+        _glfwInputError(GLFW_OUT_OF_MEMORY, NULL);
+        return NULL;
+    }
+
+    for (int i = 0;  i < _glfw.null.clipboardFlavorCount;  i++)
+        targets[i] = _glfw.null.clipboardFlavors[i].mimeType;
+
+    _glfw.null.clipboardTargets = targets;
+    *count = _glfw.null.clipboardFlavorCount;
+    return targets;
 }
 
 void _glfwUpdatePreeditCursorRectangleNull(_GLFWwindow* window)
