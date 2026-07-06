@@ -324,6 +324,15 @@ typedef PFN_vkVoidFunction (APIENTRY * PFN_vkGetInstanceProcAddr)(VkInstance,con
 typedef VkResult (APIENTRY * PFN_vkEnumerateInstanceExtensionProperties)(const char*,uint32_t*,VkExtensionProperties*);
 #define vkGetInstanceProcAddr _glfw.vk.GetInstanceProcAddr
 
+// Stored clipboard flavor (owned copies of one glfwSetClipboardData entry)
+//
+typedef struct _GLFWclipboardFlavor
+{
+    char*           mimeType;
+    unsigned char*  data;
+    size_t          size;
+} _GLFWclipboardFlavor;
+
 #include "platform.h"
 
 #define GLFW_NATIVE_INCLUDE_NONE
@@ -731,6 +740,9 @@ struct _GLFWplatform
     int (*getKeyScancode)(int);
     void (*setClipboardString)(const char*);
     const char* (*getClipboardString)(void);
+    void (*setClipboardData)(const GLFWclipboardflavor*,int);
+    const unsigned char* (*getClipboardData)(const char*,size_t*);
+    const char** (*getClipboardTargets)(int*);
     void (*updatePreeditCursorRectangle)(_GLFWwindow*);
     void (*resetPreeditText)(_GLFWwindow*);
     void (*setIMEStatus)(_GLFWwindow*,int);
@@ -1048,6 +1060,12 @@ const char* _glfwGetVulkanResultString(VkResult result);
 size_t _glfwEncodeUTF8(char* s, uint32_t codepoint);
 uint32_t _glfwDecodeUTF8(const char** s);
 char** _glfwParseUriList(char* text, int* count);
+
+GLFWbool _glfwCopyClipboardFlavors(const GLFWclipboardflavor* flavors, int count,
+                                   _GLFWclipboardFlavor** stored, int* storedCount);
+void _glfwFreeClipboardFlavors(_GLFWclipboardFlavor** flavors, int* count);
+const _GLFWclipboardFlavor* _glfwFindClipboardFlavor(const _GLFWclipboardFlavor* flavors,
+                                                     int count, const char* mimeType);
 
 char* _glfw_strdup(const char* source);
 int _glfw_min(int a, int b);

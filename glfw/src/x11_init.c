@@ -1187,6 +1187,9 @@ GLFWbool _glfwConnectX11(int platformID, _GLFWplatform* platform)
         .getKeyScancode = _glfwGetKeyScancodeX11,
         .setClipboardString = _glfwSetClipboardStringX11,
         .getClipboardString = _glfwGetClipboardStringX11,
+        .setClipboardData = _glfwSetClipboardDataX11,
+        .getClipboardData = _glfwGetClipboardDataX11,
+        .getClipboardTargets = _glfwGetClipboardTargetsX11,
         .updatePreeditCursorRectangle = _glfwUpdatePreeditCursorRectangleX11,
         .resetPreeditText = _glfwResetPreeditTextX11,
         .setIMEStatus = _glfwSetIMEStatusX11,
@@ -1588,6 +1591,16 @@ void _glfwTerminateX11(void)
 
     _glfw_free(_glfw.x11.primarySelectionString);
     _glfw_free(_glfw.x11.clipboardString);
+    _glfwFreeClipboardFlavorStateX11();
+    _glfwFreeClipboardTargetsResultX11();
+    _glfw_free(_glfw.x11.clipboardDataResult);
+    _glfw.x11.clipboardDataResult = NULL;
+
+    for (int i = 0;  i < _glfw.x11.incrTransferCount;  i++)
+        _glfw_free(_glfw.x11.incrTransfers[i].data);
+    _glfw_free(_glfw.x11.incrTransfers);
+    _glfw.x11.incrTransfers = NULL;
+    _glfw.x11.incrTransferCount = 0;
 
     XUnregisterIMInstantiateCallback(_glfw.x11.display,
                                      NULL, NULL, NULL,

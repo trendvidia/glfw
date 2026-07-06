@@ -570,6 +570,18 @@ typedef struct _GLFWwindowX11
 
 // X11-specific global data
 //
+// Outgoing INCR selection transfer being served (ICCCM section 2.7.2)
+//
+typedef struct _GLFWincrTransferX11
+{
+    Window          requestor;
+    Atom            property;
+    Atom            target;
+    unsigned char*  data;
+    size_t          size;
+    size_t          offset;
+} _GLFWincrTransferX11;
+
 typedef struct _GLFWlibraryX11
 {
     Display*        display;
@@ -596,6 +608,19 @@ typedef struct _GLFWlibraryX11
     char*           primarySelectionString;
     // Clipboard string (while the selection is owned)
     char*           clipboardString;
+    // Clipboard data flavors (while the selection is owned)
+    _GLFWclipboardFlavor* clipboardFlavors;
+    int             clipboardFlavorCount;
+    // Interned target atom per clipboard flavor
+    Atom*           clipboardFlavorTargets;
+    // Scratch result of the last glfwGetClipboardData call
+    unsigned char*  clipboardDataResult;
+    // Scratch result of the last glfwGetClipboardTargets call
+    char**          clipboardTargetsResult;
+    int             clipboardTargetsResultCount;
+    // Outgoing INCR selection transfers being served
+    _GLFWincrTransferX11* incrTransfers;
+    int             incrTransferCount;
     // Key name string
     char            keynames[GLFW_KEY_LAST + 1][5];
     // X11 keycode to GLFW key LUT
@@ -979,6 +1004,11 @@ void _glfwDestroyCursorX11(_GLFWcursor* cursor);
 void _glfwSetCursorX11(_GLFWwindow* window, _GLFWcursor* cursor);
 void _glfwSetClipboardStringX11(const char* string);
 const char* _glfwGetClipboardStringX11(void);
+void _glfwSetClipboardDataX11(const GLFWclipboardflavor* flavors, int count);
+const unsigned char* _glfwGetClipboardDataX11(const char* mimeType, size_t* size);
+const char** _glfwGetClipboardTargetsX11(int* count);
+void _glfwFreeClipboardFlavorStateX11(void);
+void _glfwFreeClipboardTargetsResultX11(void);
 
 void _glfwUpdatePreeditCursorRectangleX11(_GLFWwindow* window);
 void _glfwResetPreeditTextX11(_GLFWwindow* window);

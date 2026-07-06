@@ -635,6 +635,9 @@ void _glfwDestroyCursorWin32(_GLFWcursor* cursor);
 void _glfwSetCursorWin32(_GLFWwindow* window, _GLFWcursor* cursor);
 void _glfwSetClipboardStringWin32(const char* string);
 const char* _glfwGetClipboardStringWin32(void);
+void _glfwSetClipboardDataWin32(const GLFWclipboardflavor* flavors, int count);
+const unsigned char* _glfwGetClipboardDataWin32(const char* mimeType, size_t* size);
+const char** _glfwGetClipboardTargetsWin32(int* count);
 
 void _glfwUpdatePreeditCursorRectangleWin32(_GLFWwindow* window);
 void _glfwResetPreeditTextWin32(_GLFWwindow* window);

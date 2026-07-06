@@ -1601,6 +1601,136 @@ GLFWAPI const char* glfwGetClipboardString(GLFWwindow* handle)
     return _glfw.platform.getClipboardString();
 }
 
+// Copies the caller's flavor array into owned storage
+//
+GLFWbool _glfwCopyClipboardFlavors(const GLFWclipboardflavor* flavors, int count,
+                                   _GLFWclipboardFlavor** stored, int* storedCount)
+{
+    *stored = NULL;
+    *storedCount = 0;
+
+    if (!count)
+        return GLFW_TRUE;
+
+    _GLFWclipboardFlavor* copy = _glfw_calloc(count, sizeof(_GLFWclipboardFlavor));
+    if (!copy)
+    {
+        _glfwInputError(GLFW_OUT_OF_MEMORY, NULL);
+        return GLFW_FALSE;
+    }
+
+    for (int i = 0;  i < count;  i++)
+    {
+        copy[i].mimeType = _glfw_strdup(flavors[i].mimeType);
+        copy[i].size = flavors[i].size;
+        copy[i].data = _glfw_calloc(1, flavors[i].size ? flavors[i].size : 1);
+        if (copy[i].data && flavors[i].size)
+            memcpy(copy[i].data, flavors[i].data, flavors[i].size);
+
+        if (!copy[i].mimeType || !copy[i].data)
+        {
+            int copied = i + 1;
+            _glfwFreeClipboardFlavors(&copy, &copied);
+            _glfwInputError(GLFW_OUT_OF_MEMORY, NULL);
+            return GLFW_FALSE;
+        }
+    }
+
+    *stored = copy;
+    *storedCount = count;
+    return GLFW_TRUE;
+}
+
+// Frees a stored flavor array created by _glfwCopyClipboardFlavors
+//
+void _glfwFreeClipboardFlavors(_GLFWclipboardFlavor** flavors, int* count)
+{
+    for (int i = 0;  i < *count;  i++)
+    {
+        _glfw_free((*flavors)[i].mimeType);
+        _glfw_free((*flavors)[i].data);
+    }
+
+    _glfw_free(*flavors);
+    *flavors = NULL;
+    *count = 0;
+}
+
+// Returns the stored flavor with the specified MIME type, or NULL
+//
+const _GLFWclipboardFlavor* _glfwFindClipboardFlavor(const _GLFWclipboardFlavor* flavors,
+                                                     int count, const char* mimeType)
+{
+    for (int i = 0;  i < count;  i++)
+    {
+        if (strcmp(flavors[i].mimeType, mimeType) == 0)
+            return flavors + i;
+    }
+
+    return NULL;
+}
+
+GLFWAPI void glfwSetClipboardData(const GLFWclipboardflavor* flavors, int count)
+{
+    assert(count >= 0);
+    assert(count == 0 || flavors != NULL);
+
+    _GLFW_REQUIRE_INIT();
+
+    if (count < 0 || (count > 0 && !flavors))
+    {
+        _glfwInputError(GLFW_INVALID_VALUE, "Invalid clipboard flavor array");
+        return;
+    }
+
+    for (int i = 0;  i < count;  i++)
+    {
+        if (!flavors[i].mimeType || !flavors[i].mimeType[0] ||
+            (flavors[i].size && !flavors[i].data))
+        {
+            _glfwInputError(GLFW_INVALID_VALUE,
+                            "Invalid clipboard flavor at index %i", i);
+            return;
+        }
+    }
+
+    _glfw.platform.setClipboardData(flavors, count);
+}
+
+GLFWAPI const unsigned char* glfwGetClipboardData(const char* mimeType, size_t* size)
+{
+    assert(mimeType != NULL);
+    assert(size != NULL);
+
+    if (size)
+        *size = 0;
+
+    _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
+
+    if (!mimeType || !mimeType[0] || !size)
+    {
+        _glfwInputError(GLFW_INVALID_VALUE, "Invalid clipboard flavor request");
+        return NULL;
+    }
+
+    return _glfw.platform.getClipboardData(mimeType, size);
+}
+
+GLFWAPI const char** glfwGetClipboardTargets(int* count)
+{
+    assert(count != NULL);
+
+    if (count)
+        *count = 0;
+
+    _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
+
+    if (!count)
+        return NULL;
+
+    return _glfw.platform.getClipboardTargets(count);
+}
+
 GLFWAPI double glfwGetTime(void)
 {
     _GLFW_REQUIRE_INIT_OR_RETURN(0.0);

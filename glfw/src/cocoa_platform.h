@@ -297,6 +297,9 @@ void _glfwDestroyCursorCocoa(_GLFWcursor* cursor);
 void _glfwSetCursorCocoa(_GLFWwindow* window, _GLFWcursor* cursor);
 void _glfwSetClipboardStringCocoa(const char* string);
 const char* _glfwGetClipboardStringCocoa(void);
+void _glfwSetClipboardDataCocoa(const GLFWclipboardflavor* flavors, int count);
+const unsigned char* _glfwGetClipboardDataCocoa(const char* mimeType, size_t* size);
+const char** _glfwGetClipboardTargetsCocoa(int* count);
 
 void _glfwUpdatePreeditCursorRectangleCocoa(_GLFWwindow* window);
 void _glfwResetPreeditTextCocoa(_GLFWwindow* window);

@@ -2171,6 +2171,34 @@ typedef struct GLFWimage
     unsigned char* pixels;
 } GLFWimage;
 
+/*! @brief One clipboard data flavor.
+ *
+ *  This describes a single flavor (representation) of clipboard data, as
+ *  written by @ref glfwSetClipboardData or read by @ref glfwGetClipboardData.
+ *
+ *  @sa @ref clipboard
+ *  @sa @ref glfwSetClipboardData
+ *  @sa @ref glfwGetClipboardData
+ *
+ *  @since Added in the trendvidia fork (fyne#513).
+ *
+ *  @ingroup input
+ */
+typedef struct GLFWclipboardflavor
+{
+    /*! The MIME type naming this flavor, e.g. `image/png` or `text/html`.
+     *  Text should use `text/plain;charset=utf-8` with UTF-8 encoded data.
+     */
+    const char* mimeType;
+    /*! The flavor data.  Treated as opaque bytes; text flavors should not
+     *  include a terminating null byte in @ref size.
+     */
+    const unsigned char* data;
+    /*! The size, in bytes, of the flavor data.
+     */
+    size_t size;
+} GLFWclipboardflavor;
+
 /*! @brief Gamepad input state
  *
  *  This describes the input state of a gamepad.
@@ -6247,6 +6275,111 @@ GLFWAPI void glfwSetClipboardString(GLFWwindow* window, const char* string);
  *  @ingroup input
  */
 GLFWAPI const char* glfwGetClipboardString(GLFWwindow* window);
+
+/*! @brief Sets the clipboard to the specified set of data flavors.
+ *
+ *  This function replaces the system clipboard contents with the specified
+ *  flavors, all written as one transaction.  Each flavor is an alternative
+ *  representation of the same logical content, named by its MIME type
+ *  (e.g. `image/png`, `text/html`, `text/uri-list`).  A flavor with MIME type
+ *  `text/plain;charset=utf-8` is also served to plain-text clipboard readers
+ *  exactly as if it had been set with @ref glfwSetClipboardString.
+ *
+ *  @param[in] flavors An array of flavors to write.
+ *  @param[in] count The number of flavors in the array.
+ *
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED, @ref
+ *  GLFW_INVALID_VALUE, @ref GLFW_PLATFORM_ERROR and @ref
+ *  GLFW_FEATURE_UNAVAILABLE (on platforms where only the native clipboard
+ *  bridge outside GLFW supports data flavors).
+ *
+ *  @remark This is currently implemented for X11, Wayland and the null
+ *  platform.  On macOS and Windows it emits @ref GLFW_FEATURE_UNAVAILABLE;
+ *  use the platform's native pasteboard/clipboard API instead.
+ *
+ *  @pointer_lifetime The flavor array and all data it points to are copied
+ *  before this function returns.
+ *
+ *  @thread_safety This function must only be called from the main thread.
+ *
+ *  @sa @ref clipboard
+ *  @sa @ref glfwGetClipboardData
+ *  @sa @ref glfwGetClipboardTargets
+ *
+ *  @since Added in the trendvidia fork (fyne#513).
+ *
+ *  @ingroup input
+ */
+GLFWAPI void glfwSetClipboardData(const GLFWclipboardflavor* flavors, int count);
+
+/*! @brief Returns the clipboard contents in the specified flavor.
+ *
+ *  This function returns the contents of the system clipboard converted to
+ *  the flavor named by the specified MIME type.  If the clipboard is empty or
+ *  its owner cannot provide that flavor, `NULL` is returned and a @ref
+ *  GLFW_FORMAT_UNAVAILABLE error is generated.
+ *
+ *  MIME types are matched literally against the targets offered by the
+ *  clipboard owner; use @ref glfwGetClipboardTargets to discover them.  For
+ *  plain text prefer @ref glfwGetClipboardString, which also handles legacy
+ *  string targets and encoding conversion.
+ *
+ *  @param[in] mimeType The MIME type naming the desired flavor.
+ *  @param[out] size Where to store the size, in bytes, of the returned data.
+ *  @return The clipboard data, or `NULL` if an
+ *  [error](@ref error_handling) occurred.
+ *
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED, @ref
+ *  GLFW_INVALID_VALUE, @ref GLFW_FORMAT_UNAVAILABLE, @ref GLFW_PLATFORM_ERROR
+ *  and @ref GLFW_FEATURE_UNAVAILABLE.
+ *
+ *  @pointer_lifetime The returned buffer is allocated and freed by GLFW.  You
+ *  should not free it yourself.  It is valid until the next call to @ref
+ *  glfwGetClipboardData or @ref glfwSetClipboardData, or until the library is
+ *  terminated.
+ *
+ *  @thread_safety This function must only be called from the main thread.
+ *
+ *  @sa @ref clipboard
+ *  @sa @ref glfwSetClipboardData
+ *  @sa @ref glfwGetClipboardTargets
+ *
+ *  @since Added in the trendvidia fork (fyne#513).
+ *
+ *  @ingroup input
+ */
+GLFWAPI const unsigned char* glfwGetClipboardData(const char* mimeType, size_t* size);
+
+/*! @brief Returns the flavors currently offered by the clipboard.
+ *
+ *  This function returns the MIME types of the flavors the current clipboard
+ *  owner offers.  Non-MIME legacy string targets (such as X11 `UTF8_STRING`)
+ *  are not included; plain text availability is implied by
+ *  `text/plain;charset=utf-8`.  If the clipboard is empty, `count` is set to
+ *  zero and `NULL` may be returned without generating an error.
+ *
+ *  @param[out] count Where to store the number of returned MIME types.
+ *  @return An array of `count` MIME type strings, or `NULL` if the clipboard
+ *  is empty or an [error](@ref error_handling) occurred.
+ *
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED, @ref
+ *  GLFW_PLATFORM_ERROR and @ref GLFW_FEATURE_UNAVAILABLE.
+ *
+ *  @pointer_lifetime The returned array and strings are allocated and freed
+ *  by GLFW.  You should not free them yourself.  They are valid until the
+ *  next call to @ref glfwGetClipboardTargets or @ref glfwSetClipboardData, or
+ *  until the library is terminated.
+ *
+ *  @thread_safety This function must only be called from the main thread.
+ *
+ *  @sa @ref clipboard
+ *  @sa @ref glfwGetClipboardData
+ *
+ *  @since Added in the trendvidia fork (fyne#513).
+ *
+ *  @ingroup input
+ */
+GLFWAPI const char** glfwGetClipboardTargets(int* count);
 
 /*! @brief Returns the GLFW time.
  *

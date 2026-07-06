@@ -55,6 +55,9 @@ GLFWbool _glfwConnectNull(int platformID, _GLFWplatform* platform)
         .getKeyScancode = _glfwGetKeyScancodeNull,
         .setClipboardString = _glfwSetClipboardStringNull,
         .getClipboardString = _glfwGetClipboardStringNull,
+        .setClipboardData = _glfwSetClipboardDataNull,
+        .getClipboardData = _glfwGetClipboardDataNull,
+        .getClipboardTargets = _glfwGetClipboardTargetsNull,
         .updatePreeditCursorRectangle = _glfwUpdatePreeditCursorRectangleNull,
         .resetPreeditText = _glfwResetPreeditTextNull,
         .setIMEStatus = _glfwSetIMEStatusNull,
@@ -262,6 +265,10 @@ int _glfwInitNull(void)
 void _glfwTerminateNull(void)
 {
     free(_glfw.null.clipboardString);
+    _glfwFreeClipboardFlavors(&_glfw.null.clipboardFlavors,
+                              &_glfw.null.clipboardFlavorCount);
+    _glfw_free(_glfw.null.clipboardTargets);
+    _glfw.null.clipboardTargets = NULL;
     _glfwTerminateOSMesa();
     _glfwTerminateEGL();
 }

@@ -188,3 +188,91 @@ func SetClipboardString(str string) {
 	C.glfwSetClipboardString(nil, cp)
 	panicError()
 }
+
+// ClipboardFlavor describes one representation (flavor) of the clipboard
+// contents, named by its MIME type (e.g. "image/png", "text/html",
+// "text/uri-list"). Text uses "text/plain;charset=utf-8" with UTF-8 data and
+// no terminating null byte.
+type ClipboardFlavor struct {
+	MIMEType string
+	Data     []byte
+}
+
+// SetClipboardData replaces the system clipboard contents with the specified
+// flavors, all written as one transaction. Each flavor is an alternative
+// representation of the same logical content. A "text/plain;charset=utf-8"
+// flavor is also served to plain-text clipboard readers exactly as if it had
+// been set with SetClipboardString.
+//
+// It is currently implemented for X11, Wayland and the null platform; on
+// macOS and Windows it is a no-op (use the native clipboard API instead).
+//
+// This function may only be called from the main thread.
+func SetClipboardData(flavors []ClipboardFlavor) {
+	count := len(flavors)
+
+	var arr *C.GLFWclipboardflavor
+	if count > 0 {
+		arr = (*C.GLFWclipboardflavor)(C.calloc(C.size_t(count),
+			C.size_t(unsafe.Sizeof(C.GLFWclipboardflavor{}))))
+		defer C.free(unsafe.Pointer(arr))
+
+		slice := unsafe.Slice(arr, count)
+		for i, flavor := range flavors {
+			slice[i].mimeType = C.CString(flavor.MIMEType)
+			defer C.free(unsafe.Pointer(slice[i].mimeType))
+			slice[i].size = C.size_t(len(flavor.Data))
+			if len(flavor.Data) > 0 {
+				slice[i].data = (*C.uchar)(C.CBytes(flavor.Data))
+				defer C.free(unsafe.Pointer(slice[i].data))
+			}
+		}
+	}
+
+	C.glfwSetClipboardData(arr, C.int(count))
+	acceptError(featureUnavailable)
+}
+
+// GetClipboardData returns the contents of the system clipboard converted to
+// the flavor named by the specified MIME type, or nil when the clipboard is
+// empty or its owner cannot provide that flavor.
+//
+// MIME types are matched literally against the targets offered by the
+// clipboard owner; use GetClipboardTargets to discover them. For plain text
+// prefer GetClipboardString, which also handles legacy string targets and
+// encoding conversion.
+//
+// This function may only be called from the main thread.
+func GetClipboardData(mimeType string) []byte {
+	cm := C.CString(mimeType)
+	defer C.free(unsafe.Pointer(cm))
+
+	var size C.size_t
+	data := C.glfwGetClipboardData(cm, &size)
+	if data == nil {
+		acceptError(FormatUnavailable, featureUnavailable)
+		return nil
+	}
+	return C.GoBytes(unsafe.Pointer(data), C.int(size))
+}
+
+// GetClipboardTargets returns the MIME types of the flavors the current
+// clipboard owner offers, or nil when the clipboard is empty. Non-MIME legacy
+// string targets (such as X11 UTF8_STRING) are not included; plain text
+// availability is implied by "text/plain;charset=utf-8".
+//
+// This function may only be called from the main thread.
+func GetClipboardTargets() []string {
+	var count C.int
+	arr := C.glfwGetClipboardTargets(&count)
+	if arr == nil || count == 0 {
+		acceptError(FormatUnavailable, featureUnavailable)
+		return nil
+	}
+
+	targets := make([]string, 0, int(count))
+	for _, p := range unsafe.Slice(arr, int(count)) {
+		targets = append(targets, C.GoString(p))
+	}
+	return targets
+}

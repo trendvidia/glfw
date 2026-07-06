@@ -188,6 +188,9 @@ typedef struct _GLFWlibraryNull
     int             xcursor;
     int             ycursor;
     char*           clipboardString;
+    _GLFWclipboardFlavor* clipboardFlavors;
+    int             clipboardFlavorCount;
+    const char**    clipboardTargets;
     _GLFWwindow*    focusedWindow;
     uint16_t        keycodes[GLFW_NULL_SC_LAST + 1];
     uint8_t         scancodes[GLFW_KEY_LAST + 1];
@@ -256,6 +259,9 @@ void _glfwDestroyCursorNull(_GLFWcursor* cursor);
 void _glfwSetCursorNull(_GLFWwindow* window, _GLFWcursor* cursor);
 void _glfwSetClipboardStringNull(const char* string);
 const char* _glfwGetClipboardStringNull(void);
+void _glfwSetClipboardDataNull(const GLFWclipboardflavor* flavors, int count);
+const unsigned char* _glfwGetClipboardDataNull(const char* mimeType, size_t* size);
+const char** _glfwGetClipboardTargetsNull(int* count);
 const char* _glfwGetScancodeNameNull(int scancode);
 int _glfwGetKeyScancodeNull(int key);
 

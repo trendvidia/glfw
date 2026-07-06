@@ -337,6 +337,8 @@ typedef struct _GLFWofferWayland
     struct wl_data_offer*       offer;
     GLFWbool                    text_plain_utf8;
     GLFWbool                    text_uri_list;
+    char**                      mimeTypes;
+    unsigned int                mimeTypeCount;
 } _GLFWofferWayland;
 
 typedef struct _GLFWscaleWayland
@@ -479,6 +481,17 @@ typedef struct _GLFWlibraryWayland
     int                         keyRepeatScancode;
 
     char*                       clipboardString;
+    // Clipboard data flavors (while the selection source is owned)
+    _GLFWclipboardFlavor*       clipboardFlavors;
+    int                         clipboardFlavorCount;
+    // MIME types offered by the current (foreign) selection offer
+    char**                      selectionMimes;
+    unsigned int                selectionMimeCount;
+    // Scratch result of the last glfwGetClipboardData call
+    unsigned char*              clipboardDataResult;
+    // Scratch result of the last glfwGetClipboardTargets call
+    char**                      clipboardTargetsResult;
+    int                         clipboardTargetsResultCount;
     short int                   keycodes[256];
     short int                   scancodes[GLFW_KEY_LAST + 1];
     char                        keynames[GLFW_KEY_LAST + 1][5];
@@ -680,6 +693,10 @@ void _glfwDestroyCursorWayland(_GLFWcursor* cursor);
 void _glfwSetCursorWayland(_GLFWwindow* window, _GLFWcursor* cursor);
 void _glfwSetClipboardStringWayland(const char* string);
 const char* _glfwGetClipboardStringWayland(void);
+void _glfwSetClipboardDataWayland(const GLFWclipboardflavor* flavors, int count);
+const unsigned char* _glfwGetClipboardDataWayland(const char* mimeType, size_t* size);
+const char** _glfwGetClipboardTargetsWayland(int* count);
+void _glfwFreeClipboardTargetsResultWayland(void);
 
 void _glfwUpdatePreeditCursorRectangleWayland(_GLFWwindow* window);
 void _glfwResetPreeditTextWayland(_GLFWwindow* window);

@@ -1316,6 +1316,89 @@ static void handleEvents(double* timeout)
     }
 }
 
+// Reads the specified data offer as the specified MIME type, returning the
+// raw bytes and their length
+//
+static unsigned char* readDataOfferAsBytes(struct wl_data_offer* offer,
+                                           const char* mimeType,
+                                           size_t* length)
+{
+    int fds[2];
+
+    *length = 0;
+
+    if (pipe2(fds, O_CLOEXEC) == -1)
+    {
+        _glfwInputError(GLFW_PLATFORM_ERROR,
+                        "Wayland: Failed to create pipe for data offer: %s",
+                        strerror(errno));
+        return NULL;
+    }
+
+    wl_data_offer_receive(offer, mimeType, fds[1]);
+    flushDisplay();
+    close(fds[1]);
+
+    unsigned char* bytes = NULL;
+    size_t size = 0;
+    size_t total = 0;
+
+    for (;;)
+    {
+        const size_t readSize = 4096;
+        const size_t requiredSize = total + readSize;
+        if (requiredSize > size)
+        {
+            unsigned char* longer = _glfw_realloc(bytes, requiredSize);
+            if (!longer)
+            {
+                _glfwInputError(GLFW_OUT_OF_MEMORY, NULL);
+                _glfw_free(bytes);
+                close(fds[0]);
+                return NULL;
+            }
+
+            bytes = longer;
+            size = requiredSize;
+        }
+
+        const ssize_t result = read(fds[0], bytes + total, readSize);
+        if (result == 0)
+            break;
+        else if (result == -1)
+        {
+            if (errno == EINTR)
+                continue;
+
+            _glfwInputError(GLFW_PLATFORM_ERROR,
+                            "Wayland: Failed to read from data offer pipe: %s",
+                            strerror(errno));
+            _glfw_free(bytes);
+            close(fds[0]);
+            return NULL;
+        }
+
+        total += result;
+    }
+
+    close(fds[0]);
+
+    *length = total;
+    return bytes;
+}
+
+// Frees the MIME type list attached to the specified offer entry
+//
+static void freeOfferMimeTypes(_GLFWofferWayland* offer)
+{
+    for (unsigned int i = 0;  i < offer->mimeTypeCount;  i++)
+        _glfw_free(offer->mimeTypes[i]);
+
+    _glfw_free(offer->mimeTypes);
+    offer->mimeTypes = NULL;
+    offer->mimeTypeCount = 0;
+}
+
 // Reads the specified data offer as the specified MIME type
 //
 static char* readDataOfferAsString(struct wl_data_offer* offer, const char* mimeType)
@@ -1953,6 +2036,17 @@ static void dataOfferHandleOffer(void* userData,
             else if (strcmp(mimeType, "text/uri-list") == 0)
                 _glfw.wl.offers[i].text_uri_list = GLFW_TRUE;
 
+            char** longer =
+                _glfw_realloc(_glfw.wl.offers[i].mimeTypes,
+                              sizeof(char*) * (_glfw.wl.offers[i].mimeTypeCount + 1));
+            if (longer)
+            {
+                _glfw.wl.offers[i].mimeTypes = longer;
+                longer[_glfw.wl.offers[i].mimeTypeCount] = _glfw_strdup(mimeType);
+                if (longer[_glfw.wl.offers[i].mimeTypeCount])
+                    _glfw.wl.offers[i].mimeTypeCount++;
+            }
+
             break;
         }
     }
@@ -2016,6 +2110,9 @@ static void dataDeviceHandleEnter(void* userData,
                 _glfw.wl.dragFocus = window;
                 _glfw.wl.dragSerial = serial;
             }
+
+            // Drag-and-drop does not use the MIME type list
+            freeOfferMimeTypes(_glfw.wl.offers + i);
 
             _glfw.wl.offers[i] = _glfw.wl.offers[_glfw.wl.offerCount - 1];
             _glfw.wl.offerCount--;
@@ -2087,14 +2184,23 @@ static void dataDeviceHandleSelection(void* userData,
         _glfw.wl.selectionOffer = NULL;
     }
 
+    for (unsigned int i = 0;  i < _glfw.wl.selectionMimeCount;  i++)
+        _glfw_free(_glfw.wl.selectionMimes[i]);
+    _glfw_free(_glfw.wl.selectionMimes);
+    _glfw.wl.selectionMimes = NULL;
+    _glfw.wl.selectionMimeCount = 0;
+
     for (unsigned int i = 0; i < _glfw.wl.offerCount; i++)
     {
         if (_glfw.wl.offers[i].offer == offer)
         {
-            if (_glfw.wl.offers[i].text_plain_utf8)
-                _glfw.wl.selectionOffer = offer;
-            else
-                wl_data_offer_destroy(offer);
+            // Keep any selection offer regardless of its flavors; data
+            // flavors beyond plain text are read via glfwGetClipboardData
+            _glfw.wl.selectionOffer = offer;
+            _glfw.wl.selectionMimes = _glfw.wl.offers[i].mimeTypes;
+            _glfw.wl.selectionMimeCount = _glfw.wl.offers[i].mimeTypeCount;
+            _glfw.wl.offers[i].mimeTypes = NULL;
+            _glfw.wl.offers[i].mimeTypeCount = 0;
 
             _glfw.wl.offers[i] = _glfw.wl.offers[_glfw.wl.offerCount - 1];
             _glfw.wl.offerCount--;
@@ -3529,20 +3635,44 @@ static void dataSourceHandleSend(void* userData,
                                  const char* mimeType,
                                  int fd)
 {
+    const unsigned char* data = NULL;
+    size_t length = 0;
+
     // Ignore it if this is an outdated or invalid request
-    if (_glfw.wl.selectionSource != source ||
-        strcmp(mimeType, "text/plain;charset=utf-8") != 0)
+    if (_glfw.wl.selectionSource != source)
     {
         close(fd);
         return;
     }
 
-    char* string = _glfw.wl.clipboardString;
-    size_t length = strlen(string);
+    if (strcmp(mimeType, "text/plain;charset=utf-8") == 0 &&
+        _glfw.wl.clipboardString)
+    {
+        data = (const unsigned char*) _glfw.wl.clipboardString;
+        length = strlen(_glfw.wl.clipboardString);
+    }
+    else
+    {
+        const _GLFWclipboardFlavor* flavor =
+            _glfwFindClipboardFlavor(_glfw.wl.clipboardFlavors,
+                                     _glfw.wl.clipboardFlavorCount,
+                                     mimeType);
+        if (flavor)
+        {
+            data = flavor->data;
+            length = flavor->size;
+        }
+    }
+
+    if (!data)
+    {
+        close(fd);
+        return;
+    }
 
     while (length > 0)
     {
-        const ssize_t result = write(fd, string, length);
+        const ssize_t result = write(fd, data, length);
         if (result == -1)
         {
             if (errno == EINTR)
@@ -3555,7 +3685,7 @@ static void dataSourceHandleSend(void* userData,
         }
 
         length -= result;
-        string += result;
+        data += result;
     }
 
     close(fd);
@@ -3594,6 +3724,8 @@ void _glfwSetClipboardStringWayland(const char* string)
         return;
     }
 
+    _glfwFreeClipboardFlavors(&_glfw.wl.clipboardFlavors,
+                              &_glfw.wl.clipboardFlavorCount);
     _glfw_free(_glfw.wl.clipboardString);
     _glfw.wl.clipboardString = copy;
 
@@ -3630,6 +3762,190 @@ const char* _glfwGetClipboardStringWayland(void)
     _glfw.wl.clipboardString =
         readDataOfferAsString(_glfw.wl.selectionOffer, "text/plain;charset=utf-8");
     return _glfw.wl.clipboardString;
+}
+
+// Frees the scratch result of the last glfwGetClipboardTargets call
+//
+void _glfwFreeClipboardTargetsResultWayland(void)
+{
+    for (int i = 0;  i < _glfw.wl.clipboardTargetsResultCount;  i++)
+        _glfw_free(_glfw.wl.clipboardTargetsResult[i]);
+
+    _glfw_free(_glfw.wl.clipboardTargetsResult);
+    _glfw.wl.clipboardTargetsResult = NULL;
+    _glfw.wl.clipboardTargetsResultCount = 0;
+}
+
+void _glfwSetClipboardDataWayland(const GLFWclipboardflavor* flavors, int count)
+{
+    if (_glfw.wl.selectionSource)
+    {
+        wl_data_source_destroy(_glfw.wl.selectionSource);
+        _glfw.wl.selectionSource = NULL;
+    }
+
+    _glfwFreeClipboardFlavors(&_glfw.wl.clipboardFlavors,
+                              &_glfw.wl.clipboardFlavorCount);
+    _glfw_free(_glfw.wl.clipboardString);
+    _glfw.wl.clipboardString = NULL;
+
+    if (!_glfwCopyClipboardFlavors(flavors, count,
+                                   &_glfw.wl.clipboardFlavors,
+                                   &_glfw.wl.clipboardFlavorCount))
+        return;
+
+    // A plain text flavor is also served through the string path
+    const _GLFWclipboardFlavor* text =
+        _glfwFindClipboardFlavor(_glfw.wl.clipboardFlavors,
+                                 _glfw.wl.clipboardFlavorCount,
+                                 "text/plain;charset=utf-8");
+    if (text)
+    {
+        char* string = _glfw_calloc(text->size + 1, 1);
+        if (string)
+        {
+            memcpy(string, text->data, text->size);
+            _glfw.wl.clipboardString = string;
+        }
+    }
+
+    _glfw.wl.selectionSource =
+        wl_data_device_manager_create_data_source(_glfw.wl.dataDeviceManager);
+    if (!_glfw.wl.selectionSource)
+    {
+        _glfwInputError(GLFW_PLATFORM_ERROR,
+                        "Wayland: Failed to create clipboard data source");
+        return;
+    }
+
+    wl_data_source_add_listener(_glfw.wl.selectionSource,
+                                &dataSourceListener,
+                                NULL);
+
+    for (int i = 0;  i < _glfw.wl.clipboardFlavorCount;  i++)
+    {
+        wl_data_source_offer(_glfw.wl.selectionSource,
+                             _glfw.wl.clipboardFlavors[i].mimeType);
+    }
+
+    wl_data_device_set_selection(_glfw.wl.dataDevice,
+                                 _glfw.wl.selectionSource,
+                                 _glfw.wl.serial);
+}
+
+const unsigned char* _glfwGetClipboardDataWayland(const char* mimeType, size_t* size)
+{
+    _glfw_free(_glfw.wl.clipboardDataResult);
+    _glfw.wl.clipboardDataResult = NULL;
+
+    if (_glfw.wl.selectionSource)
+    {
+        // Instead of round-tripping our own data through a pipe (which would
+        // deadlock: the send event lands on our own queue), return the
+        // stored flavor
+        const _GLFWclipboardFlavor* flavor =
+            _glfwFindClipboardFlavor(_glfw.wl.clipboardFlavors,
+                                     _glfw.wl.clipboardFlavorCount,
+                                     mimeType);
+        if (!flavor)
+        {
+            _glfwInputError(GLFW_FORMAT_UNAVAILABLE,
+                            "Wayland: Clipboard flavor %s unavailable", mimeType);
+            return NULL;
+        }
+
+        *size = flavor->size;
+        return flavor->data;
+    }
+
+    if (!_glfw.wl.selectionOffer)
+    {
+        _glfwInputError(GLFW_FORMAT_UNAVAILABLE,
+                        "Wayland: No clipboard data available");
+        return NULL;
+    }
+
+    GLFWbool offered = GLFW_FALSE;
+    for (unsigned int i = 0;  i < _glfw.wl.selectionMimeCount;  i++)
+    {
+        if (strcmp(_glfw.wl.selectionMimes[i], mimeType) == 0)
+        {
+            offered = GLFW_TRUE;
+            break;
+        }
+    }
+
+    if (!offered)
+    {
+        _glfwInputError(GLFW_FORMAT_UNAVAILABLE,
+                        "Wayland: Clipboard flavor %s unavailable", mimeType);
+        return NULL;
+    }
+
+    _glfw.wl.clipboardDataResult =
+        readDataOfferAsBytes(_glfw.wl.selectionOffer, mimeType, size);
+    return _glfw.wl.clipboardDataResult;
+}
+
+const char** _glfwGetClipboardTargetsWayland(int* count)
+{
+    _glfwFreeClipboardTargetsResultWayland();
+
+    const char** mimes = NULL;
+    int mimeCount = 0;
+
+    if (_glfw.wl.selectionSource)
+    {
+        mimeCount = _glfw.wl.clipboardFlavorCount;
+        if (mimeCount)
+        {
+            char** targets = _glfw_calloc(mimeCount, sizeof(char*));
+            if (!targets)
+            {
+                _glfwInputError(GLFW_OUT_OF_MEMORY, NULL);
+                return NULL;
+            }
+
+            for (int i = 0;  i < mimeCount;  i++)
+                targets[i] = _glfw_strdup(_glfw.wl.clipboardFlavors[i].mimeType);
+
+            _glfw.wl.clipboardTargetsResult = targets;
+            _glfw.wl.clipboardTargetsResultCount = mimeCount;
+            mimes = (const char**) targets;
+        }
+    }
+    else if (_glfw.wl.selectionOffer && _glfw.wl.selectionMimeCount)
+    {
+        char** targets = _glfw_calloc(_glfw.wl.selectionMimeCount,
+                                      sizeof(char*));
+        if (!targets)
+        {
+            _glfwInputError(GLFW_OUT_OF_MEMORY, NULL);
+            return NULL;
+        }
+
+        // Only MIME-typed offers are reported; sources may also offer
+        // legacy string names such as TEXT or UTF8_STRING
+        for (unsigned int i = 0;  i < _glfw.wl.selectionMimeCount;  i++)
+        {
+            if (strchr(_glfw.wl.selectionMimes[i], '/'))
+                targets[mimeCount++] = _glfw_strdup(_glfw.wl.selectionMimes[i]);
+        }
+
+        if (mimeCount)
+        {
+            _glfw.wl.clipboardTargetsResult = targets;
+            _glfw.wl.clipboardTargetsResultCount = mimeCount;
+            mimes = (const char**) targets;
+        }
+        else
+            _glfw_free(targets);
+    }
+
+    if (mimes)
+        *count = mimeCount;
+
+    return mimes;
 }
 
 void _glfwUpdatePreeditCursorRectangleWayland(_GLFWwindow* window)

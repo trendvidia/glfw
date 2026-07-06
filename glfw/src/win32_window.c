@@ -2856,6 +2856,26 @@ const char* _glfwGetClipboardStringWin32(void)
     return _glfw.win32.clipboardString;
 }
 
+void _glfwSetClipboardDataWin32(const GLFWclipboardflavor* flavors, int count)
+{
+    _glfwInputError(GLFW_FEATURE_UNAVAILABLE,
+                    "Win32: Clipboard data flavors are not implemented; use the native clipboard API");
+}
+
+const unsigned char* _glfwGetClipboardDataWin32(const char* mimeType, size_t* size)
+{
+    _glfwInputError(GLFW_FEATURE_UNAVAILABLE,
+                    "Win32: Clipboard data flavors are not implemented; use the native clipboard API");
+    return NULL;
+}
+
+const char** _glfwGetClipboardTargetsWin32(int* count)
+{
+    _glfwInputError(GLFW_FEATURE_UNAVAILABLE,
+                    "Win32: Clipboard data flavors are not implemented; use the native clipboard API");
+    return NULL;
+}
+
 void _glfwUpdatePreeditCursorRectangleWin32(_GLFWwindow* window)
 {
     _GLFWpreedit* preedit = &window->preedit;
