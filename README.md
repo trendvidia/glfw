@@ -270,3 +270,5 @@ func main() {
 * Renamed `OpenglCoreProfile` to `OpenGLCoreProfile`.
 * Renamed `OpenglCompatProfile` to `OpenGLCompatProfile`.
 * Renamed `KeyKp...` to `KeyKP...`.
+
+<!-- ci-probe: verifying Actions run on PRs (fyne#587) -->
