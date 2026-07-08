@@ -652,6 +652,7 @@ typedef struct _GLFWlibraryX11
     Atom            NET_WM_STATE_MAXIMIZED_VERT;
     Atom            NET_WM_STATE_MAXIMIZED_HORZ;
     Atom            NET_WM_STATE_DEMANDS_ATTENTION;
+    Atom            NET_WM_STATE_MODAL;
     Atom            NET_WM_BYPASS_COMPOSITOR;
     Atom            NET_WM_FULLSCREEN_MONITORS;
     Atom            NET_WM_WINDOW_OPACITY;

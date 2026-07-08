@@ -54,6 +54,22 @@ func (w *Window) SetX11Parent(parent *Window) {
 	panicError()
 }
 
+// SetX11Modal sets or clears native window-modality (_NET_WM_STATE_MODAL) so a
+// compliant window manager blocks input to w's WM_TRANSIENT_FOR owner while w
+// is shown. Call SetX11Parent first to establish that owner; pass false to
+// clear the modal state. Must be called from the main thread.
+//
+// This is a trendvidia/glfw extension (not in upstream GLFW), the modal twin of
+// (*Window).SetX11Parent, for window-hosted dialogs (fyne#498).
+func (w *Window) SetX11Modal(modal bool) {
+	m := C.int(False)
+	if modal {
+		m = C.int(True)
+	}
+	C.glfwSetX11WindowModal(w.data, m)
+	panicError()
+}
+
 // GetGLXContext returns the GLXContext of the window.
 func (w *Window) GetGLXContext() C.GLXContext {
 	ret := C.glfwGetGLXContext(w.data)
