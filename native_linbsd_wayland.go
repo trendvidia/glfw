@@ -37,6 +37,23 @@ func (w *Window) GetWaylandWindow() *C.struct_wl_surface {
 	return ret
 }
 
+// SetWaylandParent establishes an xdg_toplevel.set_parent relationship so the
+// compositor keeps w stacked above parent and minimizes them together. Pass a
+// nil parent to unset it. Both windows must be mapped toplevels; the call is
+// ignored if w has no xdg_toplevel yet. Must be called from the main thread.
+//
+// This is a trendvidia/glfw extension (not in upstream GLFW): GLFW does not
+// otherwise expose the internal xdg_toplevel, so window-hosted dialogs
+// (fyne#598) cannot express window parenting on Wayland without it.
+func (w *Window) SetWaylandParent(parent *Window) {
+	var p *C.GLFWwindow
+	if parent != nil {
+		p = parent.data
+	}
+	C.glfwSetWaylandWindowParent(w.data, p)
+	panicError()
+}
+
 func GetEGLDisplay() C.EGLDisplay {
 	ret := C.glfwGetEGLDisplay()
 	panicError()

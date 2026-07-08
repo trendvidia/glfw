@@ -4210,6 +4210,28 @@ GLFWAPI Window glfwGetX11Window(GLFWwindow* handle)
     return window->x11.handle;
 }
 
+GLFWAPI void glfwSetX11WindowParent(GLFWwindow* handle, GLFWwindow* parentHandle)
+{
+    _GLFWwindow* window = (_GLFWwindow*) handle;
+    _GLFWwindow* parent = (_GLFWwindow*) parentHandle;
+    _GLFW_REQUIRE_INIT();
+
+    if (_glfw.platform.platformID != GLFW_PLATFORM_X11)
+    {
+        _glfwInputError(GLFW_PLATFORM_UNAVAILABLE, "X11: Platform not initialized");
+        return;
+    }
+
+    if (parent)
+        XSetTransientForHint(_glfw.x11.display, window->x11.handle, parent->x11.handle);
+    else
+    {
+        Atom wmTransientFor = XInternAtom(_glfw.x11.display, "WM_TRANSIENT_FOR", False);
+        XDeleteProperty(_glfw.x11.display, window->x11.handle, wmTransientFor);
+    }
+    XFlush(_glfw.x11.display);
+}
+
 GLFWAPI void glfwSetX11SelectionString(const char* string)
 {
     _GLFW_REQUIRE_INIT();

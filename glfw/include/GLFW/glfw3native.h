@@ -393,6 +393,24 @@ GLFWAPI RROutput glfwGetX11Monitor(GLFWmonitor* monitor);
  */
 GLFWAPI Window glfwGetX11Window(GLFWwindow* window);
 
+/*! @brief Sets the parent (owner) window of the specified window.
+ *
+ *  Sets the `WM_TRANSIENT_FOR` hint (via `XSetTransientForHint`) so the window
+ *  manager keeps `window` above `parent` and minimizes them together. Pass
+ *  `NULL` as `parent` to clear the hint.
+ *
+ *  This is a trendvidia/glfw extension (not in upstream GLFW), the X11 twin of
+ *  @ref glfwSetWaylandWindowParent, added for window-hosted dialogs (fyne#598).
+ *
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
+ *  GLFW_PLATFORM_UNAVAILABLE.
+ *
+ *  @thread_safety This function must only be called from the main thread.
+ *
+ *  @ingroup native
+ */
+GLFWAPI void glfwSetX11WindowParent(GLFWwindow* window, GLFWwindow* parent);
+
 /*! @brief Sets the current primary selection to the specified string.
  *
  *  @param[in] string A UTF-8 encoded string.
@@ -531,6 +549,27 @@ GLFWAPI struct wl_output* glfwGetWaylandMonitor(GLFWmonitor* monitor);
  *  @ingroup native
  */
 GLFWAPI struct wl_surface* glfwGetWaylandWindow(GLFWwindow* window);
+
+/*! @brief Sets the parent (owner) toplevel of the specified window.
+ *
+ *  Establishes an `xdg_toplevel.set_parent` relationship so the compositor
+ *  keeps `window` stacked above `parent` and minimizes them together. Pass
+ *  `NULL` as `parent` to unset the relationship. Both windows must be mapped
+ *  toplevels; the call is ignored if `window` has no xdg_toplevel yet.
+ *
+ *  This is a trendvidia/glfw extension (not in upstream GLFW), added for
+ *  window-hosted dialogs (fyne#598): GLFW does not otherwise expose the
+ *  internal `xdg_toplevel`, and the relationship cannot be expressed through
+ *  the public API.
+ *
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
+ *  GLFW_PLATFORM_UNAVAILABLE.
+ *
+ *  @thread_safety This function must only be called from the main thread.
+ *
+ *  @ingroup native
+ */
+GLFWAPI void glfwSetWaylandWindowParent(GLFWwindow* window, GLFWwindow* parent);
 #endif
 
 #if defined(GLFW_EXPOSE_NATIVE_EGL)
