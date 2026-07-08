@@ -411,6 +411,25 @@ GLFWAPI Window glfwGetX11Window(GLFWwindow* window);
  */
 GLFWAPI void glfwSetX11WindowParent(GLFWwindow* window, GLFWwindow* parent);
 
+/*! @brief Sets or clears native window-modality (`_NET_WM_STATE_MODAL`).
+ *
+ *  Adds or removes `_NET_WM_STATE_MODAL` from the window's `_NET_WM_STATE` so a
+ *  compliant window manager blocks input to the window's `WM_TRANSIENT_FOR`
+ *  owner while this window is up. Call @ref glfwSetX11WindowParent first to set
+ *  that owner; a `GLFW_FALSE` value clears the modal state.
+ *
+ *  This is a trendvidia/glfw extension (not in upstream GLFW), the modal twin
+ *  of @ref glfwSetX11WindowParent, added for window-hosted dialogs (fyne#498).
+ *
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
+ *  GLFW_PLATFORM_UNAVAILABLE.
+ *
+ *  @thread_safety This function must only be called from the main thread.
+ *
+ *  @ingroup native
+ */
+GLFWAPI void glfwSetX11WindowModal(GLFWwindow* window, int modal);
+
 /*! @brief Sets the current primary selection to the specified string.
  *
  *  @param[in] string A UTF-8 encoded string.

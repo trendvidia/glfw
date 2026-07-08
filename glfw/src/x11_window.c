@@ -4232,6 +4232,84 @@ GLFWAPI void glfwSetX11WindowParent(GLFWwindow* handle, GLFWwindow* parentHandle
     XFlush(_glfw.x11.display);
 }
 
+GLFWAPI void glfwSetX11WindowModal(GLFWwindow* handle, int modal)
+{
+    _GLFWwindow* window = (_GLFWwindow*) handle;
+    _GLFW_REQUIRE_INIT();
+
+    if (_glfw.platform.platformID != GLFW_PLATFORM_X11)
+    {
+        _glfwInputError(GLFW_PLATFORM_UNAVAILABLE, "X11: Platform not initialized");
+        return;
+    }
+
+    if (!_glfw.x11.NET_WM_STATE || !_glfw.x11.NET_WM_STATE_MODAL)
+        return;
+
+    // Toggle _NET_WM_STATE_MODAL exactly as _glfwSetWindowFloatingX11 toggles
+    // _NET_WM_STATE_ABOVE: a client message to the WM while the window is
+    // mapped, else an edit of the _NET_WM_STATE property it will read on map.
+    // Modality is relative to WM_TRANSIENT_FOR, so glfwSetX11WindowParent must
+    // have set the owner for the WM to block the right window.
+    if (_glfwWindowVisibleX11(window))
+    {
+        const long action = modal ? _NET_WM_STATE_ADD : _NET_WM_STATE_REMOVE;
+        sendEventToWM(window,
+                      _glfw.x11.NET_WM_STATE,
+                      action,
+                      _glfw.x11.NET_WM_STATE_MODAL,
+                      0, 1, 0);
+    }
+    else
+    {
+        Atom* states = NULL;
+        const unsigned long count =
+            _glfwGetWindowPropertyX11(window->x11.handle,
+                                      _glfw.x11.NET_WM_STATE,
+                                      XA_ATOM,
+                                      (unsigned char**) &states);
+
+        if (modal)
+        {
+            unsigned long i;
+
+            for (i = 0;  i < count;  i++)
+            {
+                if (states[i] == _glfw.x11.NET_WM_STATE_MODAL)
+                    break;
+            }
+
+            if (i == count)
+            {
+                XChangeProperty(_glfw.x11.display, window->x11.handle,
+                                _glfw.x11.NET_WM_STATE, XA_ATOM, 32,
+                                PropModeAppend,
+                                (unsigned char*) &_glfw.x11.NET_WM_STATE_MODAL,
+                                1);
+            }
+        }
+        else if (states)
+        {
+            for (unsigned long i = 0;  i < count;  i++)
+            {
+                if (states[i] == _glfw.x11.NET_WM_STATE_MODAL)
+                {
+                    states[i] = states[count - 1];
+                    XChangeProperty(_glfw.x11.display, window->x11.handle,
+                                    _glfw.x11.NET_WM_STATE, XA_ATOM, 32,
+                                    PropModeReplace, (unsigned char*) states, count - 1);
+                    break;
+                }
+            }
+        }
+
+        if (states)
+            XFree(states);
+    }
+
+    XFlush(_glfw.x11.display);
+}
+
 GLFWAPI void glfwSetX11SelectionString(const char* string)
 {
     _GLFW_REQUIRE_INIT();
