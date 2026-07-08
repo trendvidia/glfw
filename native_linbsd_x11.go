@@ -39,6 +39,21 @@ func (w *Window) GetX11Window() C.Window {
 	return ret
 }
 
+// SetX11Parent sets the WM_TRANSIENT_FOR hint so the window manager keeps w
+// above parent and minimizes them together. Pass a nil parent to clear it.
+// Must be called from the main thread.
+//
+// This is a trendvidia/glfw extension (not in upstream GLFW), the X11 twin of
+// (*Window).SetWaylandParent, for window-hosted dialogs (fyne#598).
+func (w *Window) SetX11Parent(parent *Window) {
+	var p *C.GLFWwindow
+	if parent != nil {
+		p = parent.data
+	}
+	C.glfwSetX11WindowParent(w.data, p)
+	panicError()
+}
+
 // GetGLXContext returns the GLXContext of the window.
 func (w *Window) GetGLXContext() C.GLXContext {
 	ret := C.glfwGetGLXContext(w.data)

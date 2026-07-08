@@ -4112,5 +4112,37 @@ GLFWAPI struct wl_surface* glfwGetWaylandWindow(GLFWwindow* handle)
     return window->wl.surface;
 }
 
+// Resolve the xdg_toplevel backing a window, whether it is decorated by
+// libdecor or driven directly through xdg-shell (mirrors acquireMonitor).
+static struct xdg_toplevel* toplevelForWindow(_GLFWwindow* window)
+{
+    if (!window)
+        return NULL;
+    if (window->wl.libdecor.frame)
+        return libdecor_frame_get_xdg_toplevel(window->wl.libdecor.frame);
+    return window->wl.xdg.toplevel;
+}
+
+GLFWAPI void glfwSetWaylandWindowParent(GLFWwindow* handle, GLFWwindow* parentHandle)
+{
+    _GLFWwindow* window = (_GLFWwindow*) handle;
+    _GLFWwindow* parent = (_GLFWwindow*) parentHandle;
+    _GLFW_REQUIRE_INIT();
+
+    if (_glfw.platform.platformID != GLFW_PLATFORM_WAYLAND)
+    {
+        _glfwInputError(GLFW_PLATFORM_UNAVAILABLE,
+                        "Wayland: Platform not initialized");
+        return;
+    }
+
+    struct xdg_toplevel* childToplevel = toplevelForWindow(window);
+    if (!childToplevel)
+        return;
+
+    // A NULL parent toplevel unsets the relationship (per xdg-shell).
+    xdg_toplevel_set_parent(childToplevel, toplevelForWindow(parent));
+}
+
 #endif // _GLFW_WAYLAND
 
