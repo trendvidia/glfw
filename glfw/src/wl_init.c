@@ -48,6 +48,7 @@
 #include "pointer-constraints-unstable-v1-client-protocol.h"
 #include "fractional-scale-v1-client-protocol.h"
 #include "xdg-activation-v1-client-protocol.h"
+#include "xdg-dialog-v1-client-protocol.h"
 #include "idle-inhibit-unstable-v1-client-protocol.h"
 #include "text-input-unstable-v1-client-protocol.h"
 #include "text-input-unstable-v3-client-protocol.h"
@@ -87,6 +88,10 @@
 
 #define types _glfw_xdg_activation_types
 #include "xdg-activation-v1-client-protocol-code.h"
+#undef types
+
+#define types _glfw_xdg_dialog_types
+#include "xdg-dialog-v1-client-protocol-code.h"
 #undef types
 
 #define types _glfw_idle_inhibit_types
@@ -202,6 +207,13 @@ static void registryHandleGlobal(void* userData,
         _glfw.wl.activationManager =
             wl_registry_bind(registry, name,
                              &xdg_activation_v1_interface,
+                             1);
+    }
+    else if (strcmp(interface, "xdg_wm_dialog_v1") == 0)
+    {
+        _glfw.wl.dialogManager =
+            wl_registry_bind(registry, name,
+                             &xdg_wm_dialog_v1_interface,
                              1);
     }
     else if (strcmp(interface, "wp_fractional_scale_manager_v1") == 0)
@@ -1017,6 +1029,8 @@ void _glfwTerminateWayland(void)
         zwp_idle_inhibit_manager_v1_destroy(_glfw.wl.idleInhibitManager);
     if (_glfw.wl.activationManager)
         xdg_activation_v1_destroy(_glfw.wl.activationManager);
+    if (_glfw.wl.dialogManager)
+        xdg_wm_dialog_v1_destroy(_glfw.wl.dialogManager);
     if (_glfw.wl.fractionalScaleManager)
         wp_fractional_scale_manager_v1_destroy(_glfw.wl.fractionalScaleManager);
     if (_glfw.wl.textInputManagerV1)

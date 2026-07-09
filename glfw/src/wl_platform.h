@@ -131,6 +131,8 @@ struct wl_output;
 #define xdg_wm_base_interface _glfw_xdg_wm_base_interface
 #define xdg_activation_v1_interface _glfw_xdg_activation_v1_interface
 #define xdg_activation_token_v1_interface _glfw_xdg_activation_token_v1_interface
+#define xdg_wm_dialog_v1_interface _glfw_xdg_wm_dialog_v1_interface
+#define xdg_dialog_v1_interface _glfw_xdg_dialog_v1_interface
 #define wl_surface_interface _glfw_wl_surface_interface
 #define wp_fractional_scale_v1_interface _glfw_wp_fractional_scale_v1_interface
 
@@ -408,6 +410,7 @@ typedef struct _GLFWwindowWayland
 
     struct zwp_idle_inhibitor_v1*   idleInhibitor;
     struct xdg_activation_token_v1* activationToken;
+    struct xdg_dialog_v1*           dialog;
 
     struct {
         GLFWbool                    decorations;
@@ -451,6 +454,7 @@ typedef struct _GLFWlibraryWayland
     struct zwp_pointer_constraints_v1*      pointerConstraints;
     struct zwp_idle_inhibit_manager_v1*     idleInhibitManager;
     struct xdg_activation_v1*               activationManager;
+    struct xdg_wm_dialog_v1*                dialogManager;
     struct wp_fractional_scale_manager_v1*  fractionalScaleManager;
     struct zwp_text_input_manager_v1*       textInputManagerV1;
     struct zwp_text_input_manager_v3*       textInputManagerV3;
