@@ -589,6 +589,27 @@ GLFWAPI struct wl_surface* glfwGetWaylandWindow(GLFWwindow* window);
  *  @ingroup native
  */
 GLFWAPI void glfwSetWaylandWindowParent(GLFWwindow* window, GLFWwindow* parent);
+
+/*! @brief Sets or clears native window-modality via the xdg-dialog-v1 protocol.
+ *
+ *  Attaches an `xdg_dialog_v1` to the window's toplevel and calls `set_modal`
+ *  (or `unset_modal` when `modal` is `GLFW_FALSE`) so a compositor supporting
+ *  the `xdg-dialog-v1` protocol blocks input to the window's parent (set via
+ *  @ref glfwSetWaylandWindowParent). Compositors without the protocol leave the
+ *  call a no-op.
+ *
+ *  This is a trendvidia/glfw extension (not in upstream GLFW), the modal twin
+ *  of @ref glfwSetWaylandWindowParent, added for window-hosted dialogs
+ *  (fyne#498).
+ *
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
+ *  GLFW_PLATFORM_UNAVAILABLE.
+ *
+ *  @thread_safety This function must only be called from the main thread.
+ *
+ *  @ingroup native
+ */
+GLFWAPI void glfwSetWaylandWindowModal(GLFWwindow* window, int modal);
 #endif
 
 #if defined(GLFW_EXPOSE_NATIVE_EGL)

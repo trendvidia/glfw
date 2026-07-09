@@ -54,6 +54,22 @@ func (w *Window) SetWaylandParent(parent *Window) {
 	panicError()
 }
 
+// SetWaylandModal sets or clears native window-modality via the xdg-dialog-v1
+// protocol so a supporting compositor blocks input to w's parent (set with
+// SetWaylandParent) while w is shown. Pass false to clear it. Compositors
+// without the protocol leave this a no-op. Must be called from the main thread.
+//
+// This is a trendvidia/glfw extension (not in upstream GLFW), the modal twin of
+// (*Window).SetWaylandParent, for window-hosted dialogs (fyne#498).
+func (w *Window) SetWaylandModal(modal bool) {
+	m := C.int(False)
+	if modal {
+		m = C.int(True)
+	}
+	C.glfwSetWaylandWindowModal(w.data, m)
+	panicError()
+}
+
 func GetEGLDisplay() C.EGLDisplay {
 	ret := C.glfwGetEGLDisplay()
 	panicError()

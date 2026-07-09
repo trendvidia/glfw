@@ -49,6 +49,7 @@
 #include "relative-pointer-unstable-v1-client-protocol.h"
 #include "pointer-constraints-unstable-v1-client-protocol.h"
 #include "xdg-activation-v1-client-protocol.h"
+#include "xdg-dialog-v1-client-protocol.h"
 #include "idle-inhibit-unstable-v1-client-protocol.h"
 #include "fractional-scale-v1-client-protocol.h"
 #include "text-input-unstable-v1-client-protocol.h"
@@ -2726,6 +2727,9 @@ void _glfwDestroyWindowWayland(_GLFWwindow* window)
     if (window->wl.activationToken)
         xdg_activation_token_v1_destroy(window->wl.activationToken);
 
+    if (window->wl.dialog)
+        xdg_dialog_v1_destroy(window->wl.dialog);
+
     if (window->wl.textInputV1) {
         zwp_text_input_v1_destroy(window->wl.textInputV1);
         _glfw_free(window->wl.textInputV1Context.preeditText);
@@ -4142,6 +4146,43 @@ GLFWAPI void glfwSetWaylandWindowParent(GLFWwindow* handle, GLFWwindow* parentHa
 
     // A NULL parent toplevel unsets the relationship (per xdg-shell).
     xdg_toplevel_set_parent(childToplevel, toplevelForWindow(parent));
+}
+
+GLFWAPI void glfwSetWaylandWindowModal(GLFWwindow* handle, int modal)
+{
+    _GLFWwindow* window = (_GLFWwindow*) handle;
+    _GLFW_REQUIRE_INIT();
+
+    if (_glfw.platform.platformID != GLFW_PLATFORM_WAYLAND)
+    {
+        _glfwInputError(GLFW_PLATFORM_UNAVAILABLE,
+                        "Wayland: Platform not initialized");
+        return;
+    }
+
+    // The compositor may not advertise xdg-dialog-v1 (older versions); then
+    // modality is left to the toolkit-level scrim.
+    if (!_glfw.wl.dialogManager)
+        return;
+
+    struct xdg_toplevel* toplevel = toplevelForWindow(window);
+    if (!toplevel)
+        return;
+
+    // An xdg_dialog_v1 is tied to the toplevel; create it lazily and keep it
+    // for the window's lifetime (destroyed in destroyWindow), toggling modality.
+    if (!window->wl.dialog)
+    {
+        window->wl.dialog =
+            xdg_wm_dialog_v1_get_xdg_dialog(_glfw.wl.dialogManager, toplevel);
+        if (!window->wl.dialog)
+            return;
+    }
+
+    if (modal)
+        xdg_dialog_v1_set_modal(window->wl.dialog);
+    else
+        xdg_dialog_v1_unset_modal(window->wl.dialog);
 }
 
 #endif // _GLFW_WAYLAND
