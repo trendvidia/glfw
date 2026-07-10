@@ -1077,8 +1077,11 @@ static void writeSelectionData(Window requestor, Atom property, Atom target,
     _glfw.x11.incrTransferCount++;
 
     // The transfer is driven by PropertyNotify events from the requestor's
-    // window
-    XSelectInput(_glfw.x11.display, requestor, PropertyChangeMask);
+    // window; StructureNotifyMask additionally delivers DestroyNotify so a
+    // requestor that dies mid-transfer can be reaped (see reapIncrTransfers)
+    // instead of leaking its entry and copied payload until glfwTerminate.
+    XSelectInput(_glfw.x11.display, requestor,
+                 PropertyChangeMask | StructureNotifyMask);
 
     const long total = (long) size;
     XChangeProperty(_glfw.x11.display,
@@ -1147,6 +1150,34 @@ static GLFWbool continueIncrTransfer(const XPropertyEvent* event)
     }
 
     return GLFW_FALSE;
+}
+
+// Frees any outgoing INCR transfers being served to the specified requestor
+// window. Called when the requestor is destroyed mid-transfer: its property
+// deletions (which drive continueIncrTransfer) would never arrive again, so the
+// entry and its copied payload would otherwise leak until glfwTerminate.
+// Returns whether any transfer was reaped.
+//
+static GLFWbool reapIncrTransfers(Window requestor)
+{
+    GLFWbool reaped = GLFW_FALSE;
+
+    for (int i = 0;  i < _glfw.x11.incrTransferCount;  /**/)
+    {
+        if (_glfw.x11.incrTransfers[i].requestor == requestor)
+        {
+            _glfw_free(_glfw.x11.incrTransfers[i].data);
+            _glfw.x11.incrTransfers[i] =
+                _glfw.x11.incrTransfers[_glfw.x11.incrTransferCount - 1];
+            _glfw.x11.incrTransferCount--;
+            reaped = GLFW_TRUE;
+            // The swapped-in entry occupies slot i now, so do not advance.
+        }
+        else
+            i++;
+    }
+
+    return reaped;
 }
 
 // Returns whether the event drives one of our outgoing INCR transfers
@@ -1634,6 +1665,13 @@ static void processEvent(XEvent *event)
         continueIncrTransfer(&event->xproperty))
     {
         // The event drove an outgoing INCR transfer to another client
+        return;
+    }
+
+    if (event->type == DestroyNotify &&
+        reapIncrTransfers(event->xdestroywindow.window))
+    {
+        // A requestor window was destroyed while we served it an INCR transfer
         return;
     }
 
