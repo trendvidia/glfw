@@ -50,6 +50,7 @@
 #include "pointer-constraints-unstable-v1-client-protocol.h"
 #include "xdg-activation-v1-client-protocol.h"
 #include "xdg-dialog-v1-client-protocol.h"
+#include "xdg-foreign-unstable-v2-client-protocol.h"
 #include "idle-inhibit-unstable-v1-client-protocol.h"
 #include "fractional-scale-v1-client-protocol.h"
 #include "text-input-unstable-v1-client-protocol.h"
@@ -2730,6 +2731,10 @@ void _glfwDestroyWindowWayland(_GLFWwindow* window)
     if (window->wl.dialog)
         xdg_dialog_v1_destroy(window->wl.dialog);
 
+    if (window->wl.exported)
+        zxdg_exported_v2_destroy(window->wl.exported);
+    _glfw_free(window->wl.exportedHandle);
+
     if (window->wl.textInputV1) {
         zwp_text_input_v1_destroy(window->wl.textInputV1);
         _glfw_free(window->wl.textInputV1Context.preeditText);
@@ -4183,6 +4188,57 @@ GLFWAPI void glfwSetWaylandWindowModal(GLFWwindow* handle, int modal)
         xdg_dialog_v1_set_modal(window->wl.dialog);
     else
         xdg_dialog_v1_unset_modal(window->wl.dialog);
+}
+
+static void handleExportedHandle(void* userData,
+                                 struct zxdg_exported_v2* exported,
+                                 const char* handle)
+{
+    _GLFWwindow* window = userData;
+    _glfw_free(window->wl.exportedHandle);
+    window->wl.exportedHandle = _glfw_strdup(handle);
+}
+
+static const struct zxdg_exported_v2_listener exportedListener =
+{
+    handleExportedHandle
+};
+
+GLFWAPI const char* glfwGetWaylandWindowExportHandle(GLFWwindow* handle)
+{
+    _GLFWwindow* window = (_GLFWwindow*) handle;
+    _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
+
+    if (_glfw.platform.platformID != GLFW_PLATFORM_WAYLAND)
+    {
+        _glfwInputError(GLFW_PLATFORM_UNAVAILABLE,
+                        "Wayland: Platform not initialized");
+        return NULL;
+    }
+
+    // The compositor may not advertise xdg-foreign (zxdg_exporter_v2); then no
+    // handle can be produced and the caller stays unparented.
+    if (!_glfw.wl.exporter || !window->wl.surface)
+        return NULL;
+
+    // Cached after the first export; the exported object (and thus the handle's
+    // validity) lives until the window is destroyed.
+    if (window->wl.exportedHandle)
+        return window->wl.exportedHandle;
+
+    window->wl.exported =
+        zxdg_exporter_v2_export_toplevel(_glfw.wl.exporter, window->wl.surface);
+    if (!window->wl.exported)
+        return NULL;
+
+    zxdg_exported_v2_add_listener(window->wl.exported, &exportedListener, window);
+
+    // The handle is delivered asynchronously via the exported 'handle' event; a
+    // roundtrip forces it to arrive before we return. This runs on the main
+    // thread (like glfwPollEvents), so dispatching pending events here is safe.
+    wl_display_roundtrip(_glfw.wl.display);
+
+    return window->wl.exportedHandle;
 }
 
 #endif // _GLFW_WAYLAND

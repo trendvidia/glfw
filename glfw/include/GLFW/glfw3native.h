@@ -610,6 +610,30 @@ GLFWAPI void glfwSetWaylandWindowParent(GLFWwindow* window, GLFWwindow* parent);
  *  @ingroup native
  */
 GLFWAPI void glfwSetWaylandWindowModal(GLFWwindow* window, int modal);
+
+/*! @brief Exports the window's toplevel via xdg-foreign and returns its handle.
+ *
+ *  Exports the window's `xdg_toplevel` through the `xdg-foreign` protocol
+ *  (`zxdg_exporter_v2`) and returns the resulting handle string, delivered by
+ *  the exporter's `handle` event (a roundtrip waits for it). The handle can be
+ *  used as an xdg-foreign parent reference — for example an XDG portal
+ *  `parent_window` of the form `"wayland:<handle>"`.
+ *
+ *  Returns `NULL` if the compositor does not advertise `zxdg_exporter_v2`. The
+ *  returned string is owned by GLFW and remains valid until the window is
+ *  destroyed; repeated calls return the same cached handle.
+ *
+ *  This is a trendvidia/glfw extension (not in upstream GLFW), added for
+ *  parenting native portal dialogs on Wayland (fyne#626).
+ *
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED and @ref
+ *  GLFW_PLATFORM_UNAVAILABLE.
+ *
+ *  @thread_safety This function must only be called from the main thread.
+ *
+ *  @ingroup native
+ */
+GLFWAPI const char* glfwGetWaylandWindowExportHandle(GLFWwindow* window);
 #endif
 
 #if defined(GLFW_EXPOSE_NATIVE_EGL)
