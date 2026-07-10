@@ -19,6 +19,8 @@ package glfw
 //#include "glfw/include/GLFW/glfw3native.h"
 import "C"
 
+import "errors"
+
 func GetWaylandDisplay() *C.struct_wl_display {
 	ret := C.glfwGetWaylandDisplay()
 	panicError()
@@ -68,6 +70,25 @@ func (w *Window) SetWaylandModal(modal bool) {
 	}
 	C.glfwSetWaylandWindowModal(w.data, m)
 	panicError()
+}
+
+// ExportWaylandHandle exports w's xdg_toplevel via the xdg-foreign protocol
+// (zxdg_exporter_v2) and returns the handle string, for use as an xdg-foreign
+// parent reference — for example an XDG portal parent_window of the form
+// "wayland:<handle>". It returns an error when the compositor does not advertise
+// xdg-foreign. The handle is owned by GLFW and remains valid until the window is
+// destroyed; repeated calls return the same handle. Must be called from the main
+// thread while w is shown.
+//
+// This is a trendvidia/glfw extension (not in upstream GLFW), added for parenting
+// native portal dialogs on Wayland (fyne#626).
+func (w *Window) ExportWaylandHandle() (string, error) {
+	h := C.glfwGetWaylandWindowExportHandle(w.data)
+	panicError()
+	if h == nil {
+		return "", errors.New("glfw: xdg-foreign export handle unavailable (compositor lacks zxdg_exporter_v2)")
+	}
+	return C.GoString(h), nil
 }
 
 func GetEGLDisplay() C.EGLDisplay {
