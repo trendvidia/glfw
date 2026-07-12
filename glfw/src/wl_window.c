@@ -4241,5 +4241,197 @@ GLFWAPI const char* glfwGetWaylandWindowExportHandle(GLFWwindow* handle)
     return window->wl.exportedHandle;
 }
 
+// Releases the outgoing drag source and its copied payload. Called once the
+// drag concludes (either cancelled or, on a version 3+ manager, dnd_finished).
+static void finishWaylandDrag(struct wl_data_source* source)
+{
+    if (_glfw.wl.dragSource == source)
+    {
+        _glfw.wl.dragSource = NULL;
+        _glfwFreeClipboardFlavors(&_glfw.wl.dragFlavors,
+                                  &_glfw.wl.dragFlavorCount);
+    }
+    wl_data_source_destroy(source);
+}
+
+static void dragSourceHandleTarget(void* userData,
+                                   struct wl_data_source* source,
+                                   const char* mimeType)
+{
+    // Target-side accept/reject feedback; the caller renders its own preview,
+    // so there is nothing to do here.
+}
+
+static void dragSourceHandleSend(void* userData,
+                                 struct wl_data_source* source,
+                                 const char* mimeType,
+                                 int fd)
+{
+    // Ignore stale requests from a superseded source.
+    if (_glfw.wl.dragSource != source)
+    {
+        close(fd);
+        return;
+    }
+
+    const _GLFWclipboardFlavor* flavor =
+        _glfwFindClipboardFlavor(_glfw.wl.dragFlavors,
+                                 _glfw.wl.dragFlavorCount,
+                                 mimeType);
+    if (!flavor)
+    {
+        close(fd);
+        return;
+    }
+
+    const unsigned char* data = flavor->data;
+    size_t length = flavor->size;
+    while (length > 0)
+    {
+        const ssize_t result = write(fd, data, length);
+        if (result == -1)
+        {
+            if (errno == EINTR)
+                continue;
+
+            _glfwInputError(GLFW_PLATFORM_ERROR,
+                            "Wayland: Error while writing the drag data: %s",
+                            strerror(errno));
+            break;
+        }
+
+        length -= result;
+        data += result;
+    }
+
+    close(fd);
+}
+
+static void dragSourceHandleCancelled(void* userData,
+                                      struct wl_data_source* source)
+{
+    // The drag ended without a successful drop (no matching MIME type, dropped
+    // outside a surface, or cancelled by the compositor), or the source was
+    // replaced. Either way the source is dead and must be released.
+    finishWaylandDrag(source);
+}
+
+static void dragSourceHandleDndDropPerformed(void* userData,
+                                             struct wl_data_source* source)
+{
+    // The user released over an accepting target. The transfer may still be in
+    // flight, so keep the source alive until dnd_finished.
+}
+
+static void dragSourceHandleDndFinished(void* userData,
+                                        struct wl_data_source* source)
+{
+    // The destination is done reading; safe to release the source and payload.
+    finishWaylandDrag(source);
+}
+
+static void dragSourceHandleAction(void* userData,
+                                   struct wl_data_source* source,
+                                   uint32_t dndAction)
+{
+    if (_glfw.wl.dragSource == source)
+        _glfw.wl.dragAction = dndAction;
+}
+
+static const struct wl_data_source_listener dragSourceListener =
+{
+    dragSourceHandleTarget,
+    dragSourceHandleSend,
+    dragSourceHandleCancelled,
+    dragSourceHandleDndDropPerformed,
+    dragSourceHandleDndFinished,
+    dragSourceHandleAction,
+};
+
+GLFWAPI int glfwStartWaylandDrag(GLFWwindow* handle,
+                                 const GLFWclipboardflavor* flavors, int count,
+                                 int actions)
+{
+    _GLFWwindow* window = (_GLFWwindow*) handle;
+    _GLFW_REQUIRE_INIT_OR_RETURN(GLFW_FALSE);
+
+    if (_glfw.platform.platformID != GLFW_PLATFORM_WAYLAND)
+    {
+        _glfwInputError(GLFW_PLATFORM_UNAVAILABLE,
+                        "Wayland: Platform not initialized");
+        return GLFW_FALSE;
+    }
+
+    if (!_glfw.wl.dataDeviceManager || !_glfw.wl.dataDevice ||
+        !window->wl.surface || !flavors || count <= 0)
+    {
+        return GLFW_FALSE;
+    }
+
+    // start_drag must reference the serial of a still-active implicit grab (the
+    // pointer button press that began the gesture). _glfw.wl.serial tracks the
+    // latest input serial, updated on button press; without one the compositor
+    // rejects the drag.
+    const uint32_t serial = _glfw.wl.serial;
+    if (!serial)
+        return GLFW_FALSE;
+
+    // Replace any drag still in progress before starting a new one.
+    if (_glfw.wl.dragSource)
+    {
+        wl_data_source_destroy(_glfw.wl.dragSource);
+        _glfw.wl.dragSource = NULL;
+    }
+    _glfwFreeClipboardFlavors(&_glfw.wl.dragFlavors, &_glfw.wl.dragFlavorCount);
+
+    // Copy the payload so the send handler can serve it without calling back
+    // into the caller during event dispatch.
+    if (!_glfwCopyClipboardFlavors(flavors, count,
+                                   &_glfw.wl.dragFlavors,
+                                   &_glfw.wl.dragFlavorCount))
+    {
+        _glfwInputError(GLFW_OUT_OF_MEMORY, NULL);
+        return GLFW_FALSE;
+    }
+
+    struct wl_data_source* source =
+        wl_data_device_manager_create_data_source(_glfw.wl.dataDeviceManager);
+    if (!source)
+    {
+        _glfwFreeClipboardFlavors(&_glfw.wl.dragFlavors,
+                                  &_glfw.wl.dragFlavorCount);
+        _glfwInputError(GLFW_PLATFORM_ERROR,
+                        "Wayland: Failed to create drag data source");
+        return GLFW_FALSE;
+    }
+
+    wl_data_source_add_listener(source, &dragSourceListener, NULL);
+
+    for (int i = 0;  i < count;  i++)
+        wl_data_source_offer(source, flavors[i].mimeType);
+
+    // Action negotiation (copy/move) requires a version 3+ source. Default to
+    // copy so a target that only performs actioned drops still accepts it.
+    if (wl_data_source_get_version(source) >= 3)
+    {
+        uint32_t dnd = (uint32_t) actions &
+            (WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY |
+             WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE);
+        if (!dnd)
+            dnd = WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY;
+        wl_data_source_set_actions(source, dnd);
+    }
+
+    _glfw.wl.dragSource = source;
+    _glfw.wl.dragAction = WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
+
+    // No drag icon surface: the caller renders its own in-app preview. The
+    // origin is the surface holding the implicit pointer grab.
+    wl_data_device_start_drag(_glfw.wl.dataDevice, source,
+                              window->wl.surface, NULL, serial);
+
+    return GLFW_TRUE;
+}
+
 #endif // _GLFW_WAYLAND
 

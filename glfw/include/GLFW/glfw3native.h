@@ -634,6 +634,49 @@ GLFWAPI void glfwSetWaylandWindowModal(GLFWwindow* window, int modal);
  *  @ingroup native
  */
 GLFWAPI const char* glfwGetWaylandWindowExportHandle(GLFWwindow* window);
+
+/*! @brief Drag-and-drop action bits for @ref glfwStartWaylandDrag.
+ *
+ *  These mirror the `wl_data_device_manager` dnd action enum. Combine them with
+ *  bitwise OR to advertise the actions a drag source supports.
+ */
+#define GLFW_WAYLAND_DND_COPY   0x1
+#define GLFW_WAYLAND_DND_MOVE   0x2
+
+/*! @brief Starts a Wayland drag-and-drop from the window as the source.
+ *
+ *  Creates a `wl_data_source`, offers each flavor's MIME type, and issues
+ *  `wl_data_device.start_drag` against the window's surface using the latest
+ *  pointer input serial (the button press that began the gesture), so it must
+ *  be called from a pointer-button handler while the button is still held.
+ *  GLFW copies the payload and serves it to the drop target from its own
+ *  `send` handler; the caller does not need to keep `flavors` alive.
+ *
+ *  `actions` is a bitmask of @ref GLFW_WAYLAND_DND_COPY and @ref
+ *  GLFW_WAYLAND_DND_MOVE (0 defaults to copy); action negotiation requires a
+ *  compositor advertising `wl_data_device_manager` version 3 or newer. No drag
+ *  icon surface is attached — the caller is expected to render its own preview.
+ *
+ *  Returns `GLFW_TRUE` if the drag was started, or `GLFW_FALSE` if the platform
+ *  is not Wayland, the data device is unavailable, no input serial is available
+ *  (not called from a button gesture), or the arguments are invalid.
+ *
+ *  This is a trendvidia/glfw extension (not in upstream GLFW), added to let a
+ *  toolkit initiate native drag-out on Wayland — the state `start_drag` needs
+ *  (data device, seat and the pointer button serial) is otherwise private to
+ *  GLFW (fyne#838).
+ *
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED, @ref
+ *  GLFW_PLATFORM_UNAVAILABLE, @ref GLFW_OUT_OF_MEMORY and @ref
+ *  GLFW_PLATFORM_ERROR.
+ *
+ *  @thread_safety This function must only be called from the main thread.
+ *
+ *  @ingroup native
+ */
+GLFWAPI int glfwStartWaylandDrag(GLFWwindow* window,
+                                 const GLFWclipboardflavor* flavors, int count,
+                                 int actions);
 #endif
 
 #if defined(GLFW_EXPOSE_NATIVE_EGL)

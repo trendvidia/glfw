@@ -163,9 +163,15 @@ static void registryHandleGlobal(void* userData,
     {
         if (!_glfw.wl.dataDeviceManager)
         {
+            // Bind at up to version 3 so outgoing drag sources
+            // (glfwStartWaylandDrag) can negotiate dnd actions via
+            // wl_data_source.set_actions and learn when the transfer is done
+            // through dnd_drop_performed / dnd_finished. Selection (clipboard)
+            // use is unaffected. Older compositors fall back to version 1.
             _glfw.wl.dataDeviceManager =
                 wl_registry_bind(registry, name,
-                                 &wl_data_device_manager_interface, 1);
+                                 &wl_data_device_manager_interface,
+                                 _glfw_min(3, version));
         }
     }
     else if (strcmp(interface, "xdg_wm_base") == 0)
@@ -1023,6 +1029,8 @@ void _glfwTerminateWayland(void)
         wl_data_offer_destroy(_glfw.wl.dragOffer);
     if (_glfw.wl.selectionSource)
         wl_data_source_destroy(_glfw.wl.selectionSource);
+    if (_glfw.wl.dragSource)
+        wl_data_source_destroy(_glfw.wl.dragSource);
     if (_glfw.wl.dataDevice)
         wl_data_device_destroy(_glfw.wl.dataDevice);
     if (_glfw.wl.dataDeviceManager)
@@ -1063,6 +1071,8 @@ void _glfwTerminateWayland(void)
         close(_glfw.wl.keyRepeatTimerfd);
     if (_glfw.wl.cursorTimerfd >= 0)
         close(_glfw.wl.cursorTimerfd);
+
+    _glfwFreeClipboardFlavors(&_glfw.wl.dragFlavors, &_glfw.wl.dragFlavorCount);
 
     _glfw_free(_glfw.wl.clipboardString);
     _glfwFreeClipboardFlavors(&_glfw.wl.clipboardFlavors,
