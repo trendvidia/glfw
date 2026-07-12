@@ -24,7 +24,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             gcc pkg-config \
             libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev \
-            libxcursor-dev libxi-dev libxkbcommon-dev \
+            libxcursor-dev libxi-dev libxxf86vm-dev libxkbcommon-dev \
             libwayland-dev wayland-protocols \
             sway xvfb x11-utils
 
