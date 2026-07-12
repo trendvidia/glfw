@@ -19,7 +19,10 @@ package glfw
 //#include "glfw/include/GLFW/glfw3native.h"
 import "C"
 
-import "errors"
+import (
+	"errors"
+	"unsafe"
+)
 
 func GetWaylandDisplay() *C.struct_wl_display {
 	ret := C.glfwGetWaylandDisplay()
@@ -89,6 +92,61 @@ func (w *Window) ExportWaylandHandle() (string, error) {
 		return "", errors.New("glfw: xdg-foreign export handle unavailable (compositor lacks zxdg_exporter_v2)")
 	}
 	return C.GoString(h), nil
+}
+
+// WaylandDragAction is a bitmask of the drag-and-drop actions a drag source
+// advertises to StartWaylandDrag. Combine values with bitwise OR.
+type WaylandDragAction int
+
+const (
+	// WaylandDragCopy advertises that the dragged data may be copied.
+	WaylandDragCopy WaylandDragAction = C.GLFW_WAYLAND_DND_COPY
+	// WaylandDragMove advertises that the dragged data may be moved.
+	WaylandDragMove WaylandDragAction = C.GLFW_WAYLAND_DND_MOVE
+)
+
+// StartWaylandDrag begins a native Wayland drag-and-drop with w as the source,
+// offering flavors as the drag payload. It creates a wl_data_source, offers each
+// flavor's MIME type and calls wl_data_device.start_drag against w's surface
+// using the latest pointer button serial, so it must be called from a mouse
+// button callback while the button is still held. GLFW copies the payload and
+// serves it to the drop target itself, so flavors need not be retained.
+//
+// actions is a bitmask of WaylandDragCopy / WaylandDragMove (0 defaults to
+// copy); action negotiation needs a compositor advertising wl_data_device_manager
+// version 3+. No drag icon surface is attached — render your own preview. It
+// returns false when the platform is not Wayland, the data device is
+// unavailable, no input serial exists (not called from a button gesture) or the
+// arguments are invalid. Must be called from the main thread.
+//
+// This is a trendvidia/glfw extension (not in upstream GLFW): the seat, data
+// device and pointer button serial that start_drag requires are otherwise
+// private to GLFW, so a toolkit cannot initiate drag-out on Wayland without it
+// (fyne#838).
+func (w *Window) StartWaylandDrag(flavors []ClipboardFlavor, actions WaylandDragAction) bool {
+	count := len(flavors)
+	if count == 0 {
+		return false
+	}
+
+	arr := (*C.GLFWclipboardflavor)(C.calloc(C.size_t(count),
+		C.size_t(unsafe.Sizeof(C.GLFWclipboardflavor{}))))
+	defer C.free(unsafe.Pointer(arr))
+
+	slice := unsafe.Slice(arr, count)
+	for i, flavor := range flavors {
+		slice[i].mimeType = C.CString(flavor.MIMEType)
+		defer C.free(unsafe.Pointer(slice[i].mimeType))
+		slice[i].size = C.size_t(len(flavor.Data))
+		if len(flavor.Data) > 0 {
+			slice[i].data = (*C.uchar)(C.CBytes(flavor.Data))
+			defer C.free(unsafe.Pointer(slice[i].data))
+		}
+	}
+
+	ret := C.glfwStartWaylandDrag(w.data, arr, C.int(count), C.int(actions))
+	panicError()
+	return glfwbool(ret)
 }
 
 func GetEGLDisplay() C.EGLDisplay {

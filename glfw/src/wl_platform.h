@@ -474,6 +474,15 @@ typedef struct _GLFWlibraryWayland
     _GLFWwindow*                dragFocus;
     uint32_t                    dragSerial;
 
+    // Outgoing drag-and-drop source started via glfwStartWaylandDrag. The
+    // payload flavors are copied so the send handler can serve them without a
+    // callback into the caller; freed when the drag concludes (cancelled /
+    // dnd_finished) or at termination.
+    struct wl_data_source*      dragSource;
+    _GLFWclipboardFlavor*       dragFlavors;
+    int                         dragFlavorCount;
+    uint32_t                    dragAction;
+
     const char*                 tag;
 
     struct wl_cursor_theme*     cursorTheme;
