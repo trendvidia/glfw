@@ -1,0 +1,44 @@
+name: integration
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  glfw-integration:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [x11, wayland]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+
+      - name: Install display server + GLFW build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc pkg-config \
+            libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxi-dev libxkbcommon-dev \
+            libwayland-dev wayland-protocols \
+            sway xvfb x11-utils
+
+      - name: Run integration tests (${{ matrix.backend }})
+        env:
+          GLFW_TEST_BACKEND: ${{ matrix.backend }}
+        run: |
+          chmod +x scripts/run-integration.sh
+          scripts/run-integration.sh -count=1
+
+      - name: Upload coverage profile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.backend }}
+          path: cover.out
+          if-no-files-found: ignore

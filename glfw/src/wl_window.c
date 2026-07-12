@@ -3738,6 +3738,12 @@ void _glfwSetClipboardStringWayland(const char* string)
     _glfw_free(_glfw.wl.clipboardString);
     _glfw.wl.clipboardString = copy;
 
+    // The clipboard selection is per-seat: without a data device (no wl_seat,
+    // e.g. a headless compositor with no input devices) there is no owner to
+    // set, so keep the string locally and skip the Wayland handoff.
+    if (!_glfw.wl.dataDevice)
+        return;
+
     _glfw.wl.selectionSource =
         wl_data_device_manager_create_data_source(_glfw.wl.dataDeviceManager);
     if (!_glfw.wl.selectionSource)
@@ -3817,6 +3823,12 @@ void _glfwSetClipboardDataWayland(const GLFWclipboardflavor* flavors, int count)
             _glfw.wl.clipboardString = string;
         }
     }
+
+    // The clipboard selection is per-seat: without a data device (no wl_seat,
+    // e.g. a headless compositor with no input devices) there is no owner to
+    // set, so keep the flavors stored locally and skip the Wayland handoff.
+    if (!_glfw.wl.dataDevice)
+        return;
 
     _glfw.wl.selectionSource =
         wl_data_device_manager_create_data_source(_glfw.wl.dataDeviceManager);
