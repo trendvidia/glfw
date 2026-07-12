@@ -914,7 +914,12 @@ int _glfwInitWayland(void)
         }
     }
 
-    if (wl_seat_get_version(_glfw.wl.seat) >= WL_KEYBOARD_REPEAT_INFO_SINCE_VERSION)
+    // A compositor may advertise no wl_seat at all (e.g. a headless server with
+    // no input devices), leaving _glfw.wl.seat NULL; wl_seat_get_version would
+    // then dereference NULL. Without a seat there is no keyboard to repeat, so
+    // the timerfd stays -1 (poll() ignores it and the key handlers never run).
+    if (_glfw.wl.seat &&
+        wl_seat_get_version(_glfw.wl.seat) >= WL_KEYBOARD_REPEAT_INFO_SINCE_VERSION)
     {
         _glfw.wl.keyRepeatTimerfd =
             timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
