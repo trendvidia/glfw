@@ -21,6 +21,7 @@ set -euo pipefail
 BACKEND="${GLFW_TEST_BACKEND:-wayland}"
 COVERPROFILE="${COVERPROFILE:-cover.out}"
 PKG="github.com/trendvidia/glfw"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 pids=()
 tmpdirs=()
@@ -31,6 +32,28 @@ cleanup() {
   for f in "${tmpfiles[@]:-}"; do rm -f "$f" 2>/dev/null || true; done
 }
 trap cleanup EXIT
+
+# Compile the wlroots virtual-pointer injector and export GLFW_TEST_VPTR_INJECT
+# so TestStartWaylandDragNoCrash (glfw#14) can drive a real drag gesture. Best
+# effort: on any missing tool the var stays unset and the test skips itself.
+build_vptr_injector() {
+  local xml="$SCRIPT_DIR/../testdata/wlr-virtual-pointer-unstable-v1.xml"
+  command -v wayland-scanner >/dev/null 2>&1 || { echo "no wayland-scanner; drag test will skip"; return 0; }
+  command -v cc >/dev/null 2>&1 || { echo "no cc; drag test will skip"; return 0; }
+  [ -f "$xml" ] || { echo "no virtual-pointer protocol xml; drag test will skip"; return 0; }
+  local d; d="$(mktemp -d)"; tmpdirs+=("$d")
+  wayland-scanner client-header "$xml" "$d/wlr-virtual-pointer-unstable-v1-client-protocol.h" || return 0
+  wayland-scanner private-code  "$xml" "$d/wlr-virtual-pointer-unstable-v1-protocol.c" || return 0
+  if cc -O2 -I"$d" "$SCRIPT_DIR/vptr-inject.c" \
+       "$d/wlr-virtual-pointer-unstable-v1-protocol.c" \
+       -lwayland-client -o "$d/vptr-inject" 2>"$d/cc.log"; then
+    export GLFW_TEST_VPTR_INJECT="$d/vptr-inject"
+    echo "built virtual-pointer injector for the glfw#14 regression test"
+  else
+    echo "virtual-pointer injector build failed (drag test will skip):" >&2
+    cat "$d/cc.log" >&2 || true
+  fi
+}
 
 # Always use a private XDG_RUNTIME_DIR so the harness's sway socket is the only
 # wayland-N socket present (a real desktop session would otherwise leave a
@@ -43,8 +66,10 @@ chmod 700 "$XDG_RUNTIME_DIR"
 case "$BACKEND" in
   wayland)
     unset DISPLAY 2>/dev/null || true
+    # 1600x1200 output so the single (sway-tiled fullscreen) window is large and
+    # the virtual-pointer injector's centre coordinate lands on it.
     swayconf="$(mktemp)"; tmpfiles+=("$swayconf")
-    printf 'output HEADLESS-1 resolution 800x600\n' >"$swayconf"
+    printf 'output HEADLESS-1 resolution 1600x1200\n' >"$swayconf"
     WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 \
       sway -c "$swayconf" >/tmp/sway-glfw-it.log 2>&1 &
     pids+=("$!")
@@ -62,6 +87,7 @@ case "$BACKEND" in
       exit 1
     }
     export WAYLAND_DISPLAY="$sock"
+    build_vptr_injector   # enables TestStartWaylandDragNoCrash (glfw#14)
     ;;
   x11)
     unset WAYLAND_DISPLAY 2>/dev/null || true
