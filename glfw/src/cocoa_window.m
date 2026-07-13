@@ -621,9 +621,31 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
 
 - (NSDragOperation)draggingEntered:(id <NSDraggingInfo>)sender
 {
+    // Report drag-motion hover feedback (#708). draggingLocation uses a
+    // bottom-left origin, so flip y into the content area's top-left space to
+    // match performDragOperation and the cursor-pos convention.
+    const NSRect contentRect = [window->ns.view frame];
+    const NSPoint pos = [sender draggingLocation];
+    _glfwInputDrag(window, GLFW_DRAG_ENTER, pos.x, contentRect.size.height - pos.y);
+
     // HACK: We don't know what to say here because we don't know what the
     //       application wants to do with the paths
     return NSDragOperationGeneric;
+}
+
+- (NSDragOperation)draggingUpdated:(id <NSDraggingInfo>)sender
+{
+    const NSRect contentRect = [window->ns.view frame];
+    const NSPoint pos = [sender draggingLocation];
+    _glfwInputDrag(window, GLFW_DRAG_OVER, pos.x, contentRect.size.height - pos.y);
+
+    return NSDragOperationGeneric;
+}
+
+- (void)draggingExited:(id <NSDraggingInfo>)sender
+{
+    // The drag left the window without dropping (#708).
+    _glfwInputDrag(window, GLFW_DRAG_LEAVE, 0, 0);
 }
 
 - (BOOL)performDragOperation:(id <NSDraggingInfo>)sender

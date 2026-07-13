@@ -232,6 +232,7 @@ type Window struct {
 	fCharHolder        func(w *Window, char rune)
 	fCharModsHolder    func(w *Window, char rune, mods ModifierKey)
 	fDropHolder        func(w *Window, names []string)
+	fDragHolder        func(w *Window, phase DragPhase, x, y float64)
 	fPreeditHolder     func(w *Window, preeditString []rune, blockSizes []int, focusedBlock int, caret int)
 	fIMEStatusHolder   func(w *Window)
 }

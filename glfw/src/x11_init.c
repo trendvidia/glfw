@@ -949,6 +949,7 @@ static GLFWbool initExtensions(void)
     _glfw.x11.XdndFinished = XInternAtom(_glfw.x11.display, "XdndFinished", False);
     _glfw.x11.XdndSelection = XInternAtom(_glfw.x11.display, "XdndSelection", False);
     _glfw.x11.XdndTypeList = XInternAtom(_glfw.x11.display, "XdndTypeList", False);
+    _glfw.x11.XdndLeave = XInternAtom(_glfw.x11.display, "XdndLeave", False);
     _glfw.x11.text_uri_list = XInternAtom(_glfw.x11.display, "text/uri-list", False);
 
     // ICCCM, EWMH and Motif window property atoms

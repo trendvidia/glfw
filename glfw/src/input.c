@@ -453,6 +453,16 @@ void _glfwInputDrop(_GLFWwindow* window, int count, const char** paths)
         window->callbacks.drop((GLFWwindow*) window, count, paths);
 }
 
+// Notifies shared code of drag-motion over the window (trendvidia/glfw, fyne #708)
+//
+void _glfwInputDrag(_GLFWwindow* window, int phase, double xpos, double ypos)
+{
+    assert(window != NULL);
+
+    if (window->callbacks.drag)
+        window->callbacks.drag((GLFWwindow*) window, phase, xpos, ypos);
+}
+
 // Notifies shared code of a joystick connection or disconnection
 //
 void _glfwInputJoystick(_GLFWjoystick* js, int event)
@@ -1155,6 +1165,16 @@ GLFWAPI GLFWdropfun glfwSetDropCallback(GLFWwindow* handle, GLFWdropfun cbfun)
 
     _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
     _GLFW_SWAP(GLFWdropfun, window->callbacks.drop, cbfun);
+    return cbfun;
+}
+
+GLFWAPI GLFWdragfun glfwSetDragCallback(GLFWwindow* handle, GLFWdragfun cbfun)
+{
+    _GLFWwindow* window = (_GLFWwindow*) handle;
+    assert(window != NULL);
+
+    _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
+    _GLFW_SWAP(GLFWdragfun, window->callbacks.drag, cbfun);
     return cbfun;
 }
 

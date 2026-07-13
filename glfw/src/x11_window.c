@@ -2040,6 +2040,9 @@ static void processEvent(XEvent *event)
                 _glfw.x11.xdnd.source  = event->xclient.data.l[0];
                 _glfw.x11.xdnd.version = event->xclient.data.l[1] >> 24;
                 _glfw.x11.xdnd.format  = None;
+                // The first XdndPosition (which carries coordinates) reports the
+                // GLFW_DRAG_ENTER; XdndEnter alone has none. See #708.
+                _glfw.x11.xdnd.entered = GLFW_FALSE;
 
                 if (_glfw.x11.xdnd.version > _GLFW_XDND_VERSION)
                     return;
@@ -2104,6 +2107,11 @@ static void processEvent(XEvent *event)
                                False, NoEventMask, &reply);
                     XFlush(_glfw.x11.display);
                 }
+
+                // The drop ends the drag; clear the enter state without a
+                // GLFW_DRAG_LEAVE — the drop itself is reported via the drop
+                // callback (#708).
+                _glfw.x11.xdnd.entered = GLFW_FALSE;
             }
             else if (event->xclient.message_type == _glfw.x11.XdndPosition)
             {
@@ -2125,6 +2133,16 @@ static void processEvent(XEvent *event)
 
                 _glfwInputCursorPos(window, xpos, ypos);
 
+                // Report drag-motion hover feedback (#708): the first position
+                // after an XdndEnter is the enter, the rest are moves.
+                if (!_glfw.x11.xdnd.entered)
+                {
+                    _glfw.x11.xdnd.entered = GLFW_TRUE;
+                    _glfwInputDrag(window, GLFW_DRAG_ENTER, xpos, ypos);
+                }
+                else
+                    _glfwInputDrag(window, GLFW_DRAG_OVER, xpos, ypos);
+
                 XEvent reply = { ClientMessage };
                 reply.xclient.window = _glfw.x11.xdnd.source;
                 reply.xclient.message_type = _glfw.x11.XdndStatus;
@@ -2144,6 +2162,15 @@ static void processEvent(XEvent *event)
                 XSendEvent(_glfw.x11.display, _glfw.x11.xdnd.source,
                            False, NoEventMask, &reply);
                 XFlush(_glfw.x11.display);
+            }
+            else if (event->xclient.message_type == _glfw.x11.XdndLeave)
+            {
+                // The drag left the window without dropping (#708).
+                if (_glfw.x11.xdnd.entered)
+                {
+                    _glfw.x11.xdnd.entered = GLFW_FALSE;
+                    _glfwInputDrag(window, GLFW_DRAG_LEAVE, 0, 0);
+                }
             }
 
             return;
