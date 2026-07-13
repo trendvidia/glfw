@@ -2054,9 +2054,31 @@ static void dataOfferHandleOffer(void* userData,
     }
 }
 
+static void dataOfferHandleSourceActions(void* userData,
+                                         struct wl_data_offer* offer,
+                                         uint32_t actions)
+{
+    // The drag source's advertised DnD actions (wl_data_offer version 3+).
+    // GLFW's drop handling accepts by MIME type and does not negotiate an
+    // action, so there is nothing to store — but the handler must exist: with
+    // the data-device manager bound at version 3, the compositor dispatches
+    // this event during a drag (Mutter routes it back to the drag source too)
+    // and a NULL listener slot would be an invalid indirect call — SIGABRT.
+}
+
+static void dataOfferHandleAction(void* userData,
+                                  struct wl_data_offer* offer,
+                                  uint32_t action)
+{
+    // The compositor-selected DnD action (wl_data_offer version 3+). No-op for
+    // the same reason as dataOfferHandleSourceActions above.
+}
+
 static const struct wl_data_offer_listener dataOfferListener =
 {
-    dataOfferHandleOffer
+    dataOfferHandleOffer,
+    dataOfferHandleSourceActions,
+    dataOfferHandleAction
 };
 
 static void dataDeviceHandleDataOffer(void* userData,
