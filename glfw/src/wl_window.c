@@ -2101,6 +2101,30 @@ static void dataDeviceHandleDataOffer(void* userData,
     wl_data_offer_add_listener(offer, &dataOfferListener, NULL);
 }
 
+// Whether a drag-and-drop enter targets the content surface of `window`. Returns
+// false when window is NULL — the enter carried a foreign surface (one not
+// tagged as a glfw window), which must not be dereferenced (glfw#17). Pure
+// pointer logic, split out so the NULL-window guard can be unit-tested without a
+// compositor via _glfwTestDragEnterTargetsWindowWayland below.
+static GLFWbool dragEnterTargetsWindow(_GLFWwindow* window,
+                                       struct wl_surface* surface,
+                                       GLFWbool offerHasUriList)
+{
+    return window && surface == window->wl.surface && offerHasUriList;
+}
+
+// Test hook (glfw#17): exposes dragEnterTargetsWindow so its NULL-window guard
+// can be exercised from a Go unit test. Not declared in any public header.
+GLFWAPI int _glfwTestDragEnterTargetsWindowWayland(void* window,
+                                                   void* surface,
+                                                   int offerHasUriList)
+{
+    return dragEnterTargetsWindow((_GLFWwindow*) window,
+                                  (struct wl_surface*) surface,
+                                  offerHasUriList ? GLFW_TRUE : GLFW_FALSE)
+               ? 1 : 0;
+}
+
 static void dataDeviceHandleEnter(void* userData,
                                   struct wl_data_device* device,
                                   uint32_t serial,
@@ -2128,12 +2152,12 @@ static void dataDeviceHandleEnter(void* userData,
                     window = wl_surface_get_user_data(surface);
             }
 
-            // window is NULL when the enter carries a foreign surface — one not
-            // tagged as a glfw window. Mutter routes such an enter to the drag
-            // source during a drag-out; guard window before dereferencing
+            // window is NULL when the enter carries a foreign surface (Mutter
+            // routes such an enter to the drag source during a drag-out);
+            // dragEnterTargetsWindow guards it before dereferencing
             // window->wl.surface (the fault at offset 0x3f8 in #17).
-            if (window && surface == window->wl.surface &&
-                _glfw.wl.offers[i].text_uri_list)
+            if (dragEnterTargetsWindow(window, surface,
+                                       _glfw.wl.offers[i].text_uri_list))
             {
                 _glfw.wl.dragOffer = offer;
                 _glfw.wl.dragFocus = window;
