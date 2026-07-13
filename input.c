@@ -36,6 +36,10 @@ void glfwSetDropCallbackCB(GLFWwindow *window) {
   glfwSetDropCallback(window, (GLFWdropfun)goDropCB);
 }
 
+void glfwSetDragCallbackCB(GLFWwindow *window) {
+  glfwSetDragCallback(window, (GLFWdragfun)goDragCB);
+}
+
 void glfwSetPreeditCallbackCB(GLFWwindow *window) {
   glfwSetPreeditCallback(window, (GLFWpreeditfun)goPreeditCB);
 }

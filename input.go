@@ -12,6 +12,7 @@ package glfw
 //void glfwSetCursorEnterCallbackCB(GLFWwindow *window);
 //void glfwSetScrollCallbackCB(GLFWwindow *window);
 //void glfwSetDropCallbackCB(GLFWwindow *window);
+//void glfwSetDragCallbackCB(GLFWwindow *window);
 //void glfwSetPreeditCallbackCB(GLFWwindow *window);
 //void glfwSetIMEStatusCallbackCB(GLFWwindow *window);
 //float GetAxisAtIndex(float *axis, int i);
@@ -391,6 +392,12 @@ func goDropCB(window unsafe.Pointer, count C.int, names **C.char) { // TODO: The
 		namesSlice[i] = C.GoString(*p)                                                                // TODO: Make this better.
 	}
 	w.fDropHolder(w, namesSlice)
+}
+
+//export goDragCB
+func goDragCB(window unsafe.Pointer, phase C.int, xpos C.double, ypos C.double) {
+	w := windows.get((*C.GLFWwindow)(window))
+	w.fDragHolder(w, DragPhase(phase), float64(xpos), float64(ypos))
 }
 
 //export goPreeditCB
@@ -775,6 +782,42 @@ func (w *Window) SetDropCallback(cbfun DropCallback) (previous DropCallback) {
 		C.glfwSetDropCallback(w.data, nil)
 	} else {
 		C.glfwSetDropCallbackCB(w.data)
+	}
+	panicError()
+	return previous
+}
+
+// DragPhase is the stage of a drag-motion event reported to a DragCallback
+// (a trendvidia/glfw extension, fyne #708).
+type DragPhase int
+
+const (
+	// DragEnter reports that a drag has entered the window's content area.
+	DragEnter DragPhase = C.GLFW_DRAG_ENTER
+	// DragOver reports that a drag is moving over the window's content area.
+	DragOver DragPhase = C.GLFW_DRAG_OVER
+	// DragLeave reports that a drag has left the window without dropping.
+	DragLeave DragPhase = C.GLFW_DRAG_LEAVE
+)
+
+// DragCallback is the drag-motion callback. Unlike DropCallback (the final
+// drop), it is called while a drag is in progress over the window so the app
+// can render hover feedback. x and y are content-area coordinates (0 on
+// DragLeave). See SetDragCallback.
+type DragCallback func(w *Window, phase DragPhase, x, y float64)
+
+// SetDragCallback sets the drag-motion callback which is called while a drag is
+// in progress over the window (on enter, on each move, and on leave), a
+// trendvidia/glfw extension (fyne #708). It is delivered on platforms whose
+// native drag protocol exposes it (X11 XDND, macOS NSDraggingDestination); on
+// others it simply never fires and only the drop is reported (SetDropCallback).
+func (w *Window) SetDragCallback(cbfun DragCallback) (previous DragCallback) {
+	previous = w.fDragHolder
+	w.fDragHolder = cbfun
+	if cbfun == nil {
+		C.glfwSetDragCallback(w.data, nil)
+	} else {
+		C.glfwSetDragCallbackCB(w.data)
 	}
 	panicError()
 	return previous

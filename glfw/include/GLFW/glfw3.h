@@ -345,6 +345,17 @@ extern "C" {
 #define GLFW_REPEAT                 2
 /*! @} */
 
+/*! @defgroup drag_phases Drag-motion phases
+ *  @brief Phases reported by a @ref GLFWdragfun (trendvidia/glfw, fyne #708).
+ *  @{ */
+/*! @brief A drag has entered the window's content area. */
+#define GLFW_DRAG_ENTER             1
+/*! @brief A drag is moving over the window's content area. */
+#define GLFW_DRAG_OVER              2
+/*! @brief A drag has left the window's content area without dropping. */
+#define GLFW_DRAG_LEAVE             3
+/*! @} */
+
 /*! @defgroup hat_state Joystick hat states
  *  @brief Joystick hat states.
  *
@@ -2039,6 +2050,31 @@ typedef void (* GLFWpreeditcandidatefun)(GLFWwindow* window,
  *  @ingroup input
  */
 typedef void (* GLFWdropfun)(GLFWwindow* window, int path_count, const char* paths[]);
+
+/*! @brief The function pointer type for drag-motion callbacks.
+ *
+ *  This is the function pointer type for drag-motion callbacks, a
+ *  trendvidia/glfw extension (fyne #708). Unlike @ref GLFWdropfun, which fires
+ *  only on the final drop, this reports a drag *in progress* over the window so
+ *  the application can show hover feedback. A drag-motion callback has the
+ *  following signature:
+ *  @code
+ *  void function_name(GLFWwindow* window, int phase, double xpos, double ypos)
+ *  @endcode
+ *
+ *  @param[in] window The window that received the event.
+ *  @param[in] phase One of `GLFW_DRAG_ENTER`, `GLFW_DRAG_OVER` or
+ *  `GLFW_DRAG_LEAVE`.
+ *  @param[in] xpos The cursor x-coordinate, relative to the left edge of the
+ *  content area (0 for `GLFW_DRAG_LEAVE`).
+ *  @param[in] ypos The cursor y-coordinate, relative to the top edge of the
+ *  content area (0 for `GLFW_DRAG_LEAVE`).
+ *
+ *  @sa @ref glfwSetDragCallback
+ *
+ *  @ingroup input
+ */
+typedef void (* GLFWdragfun)(GLFWwindow* window, int phase, double xpos, double ypos);
 
 /*! @brief The function pointer type for monitor configuration callbacks.
  *
@@ -5765,6 +5801,39 @@ GLFWAPI GLFWscrollfun glfwSetScrollCallback(GLFWwindow* window, GLFWscrollfun ca
  *  @ingroup input
  */
 GLFWAPI GLFWdropfun glfwSetDropCallback(GLFWwindow* window, GLFWdropfun callback);
+
+/*! @brief Sets the drag-motion callback.
+ *
+ *  This function sets the drag-motion callback of the specified window, a
+ *  trendvidia/glfw extension (fyne #708). It is called while a drag is in
+ *  progress over the window — on enter, on each move, and on leave — so the
+ *  application can render hover feedback before the drop. The final drop is
+ *  still reported through @ref glfwSetDropCallback.
+ *
+ *  Drag-motion is delivered on the platforms whose native drag protocol exposes
+ *  it (X11 XDND and macOS `NSDraggingDestination`); on platforms without it the
+ *  callback simply never fires and only the drop is reported.
+ *
+ *  @param[in] window The window whose callback to set.
+ *  @param[in] callback The new drag-motion callback, or `NULL` to remove the
+ *  currently set callback.
+ *  @return The previously set callback, or `NULL` if no callback was set or the
+ *  library had not been [initialized](@ref intro_init).
+ *
+ *  @callback_signature
+ *  @code
+ *  void function_name(GLFWwindow* window, int phase, double xpos, double ypos)
+ *  @endcode
+ *  For more information about the callback parameters, see the
+ *  [function pointer type](@ref GLFWdragfun).
+ *
+ *  @errors Possible errors include @ref GLFW_NOT_INITIALIZED.
+ *
+ *  @thread_safety This function must only be called from the main thread.
+ *
+ *  @ingroup input
+ */
+GLFWAPI GLFWdragfun glfwSetDragCallback(GLFWwindow* window, GLFWdragfun callback);
 
 /*! @brief Returns whether the specified joystick is present.
  *

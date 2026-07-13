@@ -674,6 +674,7 @@ typedef struct _GLFWlibraryX11
     Atom            XdndFinished;
     Atom            XdndSelection;
     Atom            XdndTypeList;
+    Atom            XdndLeave;
     Atom            text_uri_list;
 
     // Selection (clipboard) atoms
@@ -851,6 +852,7 @@ typedef struct _GLFWlibraryX11
         int         version;
         Window      source;
         Atom        format;
+        GLFWbool    entered; // a GLFW_DRAG_ENTER has been reported, awaiting leave/drop
     } xdnd;
 
     struct {

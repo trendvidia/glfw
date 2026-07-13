@@ -622,6 +622,7 @@ struct _GLFWwindow
         GLFWimestatusfun          imestatus;
         GLFWpreeditcandidatefun   preeditCandidate;
         GLFWdropfun               drop;
+        GLFWdragfun               drag;
     } callbacks;
 
     // This is defined in platform.h
@@ -987,6 +988,7 @@ void _glfwInputMouseClick(_GLFWwindow* window, int button, int action, int mods)
 void _glfwInputCursorPos(_GLFWwindow* window, double xpos, double ypos);
 void _glfwInputCursorEnter(_GLFWwindow* window, GLFWbool entered);
 void _glfwInputDrop(_GLFWwindow* window, int count, const char** names);
+void _glfwInputDrag(_GLFWwindow* window, int phase, double xpos, double ypos);
 void _glfwInputJoystick(_GLFWjoystick* js, int event);
 void _glfwInputJoystickAxis(_GLFWjoystick* js, int axis, float value);
 void _glfwInputJoystickButton(_GLFWjoystick* js, int button, char value);
