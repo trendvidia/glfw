@@ -2128,7 +2128,12 @@ static void dataDeviceHandleEnter(void* userData,
                     window = wl_surface_get_user_data(surface);
             }
 
-            if (surface == window->wl.surface && _glfw.wl.offers[i].text_uri_list)
+            // window is NULL when the enter carries a foreign surface — one not
+            // tagged as a glfw window. Mutter routes such an enter to the drag
+            // source during a drag-out; guard window before dereferencing
+            // window->wl.surface (the fault at offset 0x3f8 in #17).
+            if (window && surface == window->wl.surface &&
+                _glfw.wl.offers[i].text_uri_list)
             {
                 _glfw.wl.dragOffer = offer;
                 _glfw.wl.dragFocus = window;
