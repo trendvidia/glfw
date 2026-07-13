@@ -25,7 +25,7 @@ jobs:
             gcc pkg-config \
             libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev \
             libxcursor-dev libxi-dev libxxf86vm-dev libxkbcommon-dev \
-            libwayland-dev wayland-protocols \
+            libwayland-dev libwayland-bin wayland-protocols \
             sway xvfb x11-utils
 
       - name: Run integration tests (${{ matrix.backend }})

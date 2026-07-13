@@ -17,8 +17,10 @@ package glfw_test
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"runtime"
 	"testing"
+	"time"
 
 	glfw "github.com/trendvidia/glfw"
 )
@@ -196,4 +198,90 @@ func TestStartWaylandDragGuard(t *testing.T) {
 	if ok {
 		t.Fatal("StartWaylandDrag succeeded with no active pointer button serial")
 	}
+}
+
+// TestStartWaylandDragNoCrash is the regression test for glfw#14: a real drag
+// must not crash the process. It needs a genuine pointer-button grab (only a
+// real input event carries the serial start_drag requires), which a headless
+// server can't otherwise provide, so it drives a wlroots virtual-pointer
+// injector (scripts/vptr-inject.c, built by run-integration.sh which exports its
+// path as GLFW_TEST_VPTR_INJECT) to press-drag-release over the window.
+//
+// Under a compositor that binds wl_data_device_manager at version 3 (sway does),
+// the drag makes the compositor route an offer back to the source surface and
+// emit wl_data_offer.source_actions — the v3 event whose missing listener slot
+// crashed v1.7.0. If the drag path regresses, this whole test process aborts
+// mid-dispatch and the run fails; a clean run proves the fix holds.
+func TestStartWaylandDragNoCrash(t *testing.T) {
+	var wayland bool
+	do(func() { wayland = glfw.GetPlatform() == glfw.PlatformWayland })
+	if !wayland {
+		t.Skip("Wayland-only")
+	}
+	injector := os.Getenv("GLFW_TEST_VPTR_INJECT")
+	if injector == "" {
+		t.Skip("no GLFW_TEST_VPTR_INJECT injector (needs zwlr_virtual_pointer, e.g. sway)")
+	}
+
+	// A visible OpenGL window: the surface must present a real buffer for the
+	// compositor to map it and route pointer input (a NoAPI window never does).
+	var w *glfw.Window
+	var err error
+	do(func() {
+		glfw.DefaultWindowHints()
+		glfw.WindowHint(glfw.Visible, glfw.True)
+		w, err = glfw.CreateWindow(800, 600, t.Name(), nil, nil)
+	})
+	if err != nil {
+		t.Fatalf("CreateWindow: %v", err)
+	}
+	t.Cleanup(func() { do(w.Destroy) })
+
+	var started bool // set on the main thread inside the button callback
+	do(func() {
+		w.MakeContextCurrent()
+		w.SetMouseButtonCallback(func(_ *glfw.Window, _ glfw.MouseButton, action glfw.Action, _ glfw.ModifierKey) {
+			if action == glfw.Press {
+				// The crash (if regressed) happens on a later dispatch iteration,
+				// not here; returning true only means the drag was issued.
+				if w.StartWaylandDrag(
+					[]glfw.ClipboardFlavor{
+						{MIMEType: "text/plain;charset=utf-8", Data: []byte("glfw#14 regression")},
+						{MIMEType: "text/uri-list", Data: []byte("file:///tmp/x\r\n")},
+					},
+					glfw.WaylandDragCopy|glfw.WaylandDragMove,
+				) {
+					started = true
+				}
+			}
+		})
+		w.SwapBuffers() // present so the toplevel maps and gains pointer focus
+	})
+
+	// Launch the injector concurrently; it presses, drags and releases (~2.5s).
+	inj := exec.Command(injector)
+	inj.Env = os.Environ()
+	if err := inj.Start(); err != nil {
+		t.Skipf("cannot start injector: %v", err)
+	}
+	defer func() { _ = inj.Process.Kill() }()
+
+	// Pump events on the main thread for long enough to cover the whole gesture
+	// and the dispatch iterations that would surface the crash.
+	deadline := time.Now().Add(6 * time.Second)
+	do(func() {
+		for time.Now().Before(deadline) {
+			glfw.WaitEventsTimeout(0.05)
+			w.SwapBuffers()
+		}
+	})
+	_ = inj.Wait()
+
+	// If the button never reached us, injection didn't work in this environment;
+	// skip rather than pass vacuously (the crash path was never exercised).
+	if !started {
+		t.Skip("virtual-pointer injection did not deliver a button press; drag path not exercised")
+	}
+	// Reaching here means the drag was started and the process survived the
+	// subsequent event dispatch — the glfw#14 crash did not recur.
 }
