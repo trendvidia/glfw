@@ -1664,6 +1664,199 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
     return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
 
+
+// OLE drop target (#708/#926). WM_DROPFILES reports only the final drop, so
+// drag-motion hover feedback (GLFW_DRAG_ENTER/OVER/LEAVE) needs a real
+// IDropTarget registered with RegisterDragDrop. Delivery mirrors the X11 XDND
+// and Cocoa NSDraggingDestination paths: enter with the first position, over
+// on motion, leave when the drag exits without dropping (a completed drop
+// fires only the drop, like the other backends). Callbacks arrive on the
+// thread that registered the target — the event thread, inside its message
+// pump — the same dispatch context as every other window callback.
+
+typedef struct _GLFWdropTargetWin32
+{
+    IDropTarget         idt; // must stay first: the COM interface pointer
+    LONG                refcount;
+    _GLFWwindow*        window;
+    BOOL                hasFiles;
+} _GLFWdropTargetWin32;
+
+static void dropTargetClientPos(_GLFWwindow* window, POINTL pt,
+                                int* xpos, int* ypos)
+{
+    POINT p = { pt.x, pt.y };
+    ScreenToClient(window->win32.handle, &p);
+    *xpos = p.x;
+    *ypos = p.y;
+}
+
+static HRESULT STDMETHODCALLTYPE dropTargetQueryInterface(IDropTarget* self,
+                                                          REFIID riid,
+                                                          void** ppv)
+{
+    if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IDropTarget))
+    {
+        *ppv = self;
+        self->lpVtbl->AddRef(self);
+        return S_OK;
+    }
+
+    *ppv = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG STDMETHODCALLTYPE dropTargetAddRef(IDropTarget* self)
+{
+    _GLFWdropTargetWin32* dt = (_GLFWdropTargetWin32*) self;
+    return InterlockedIncrement(&dt->refcount);
+}
+
+static ULONG STDMETHODCALLTYPE dropTargetRelease(IDropTarget* self)
+{
+    _GLFWdropTargetWin32* dt = (_GLFWdropTargetWin32*) self;
+    const ULONG refcount = InterlockedDecrement(&dt->refcount);
+    if (refcount == 0)
+        _glfw_free(dt);
+
+    return refcount;
+}
+
+static HRESULT STDMETHODCALLTYPE dropTargetDragEnter(IDropTarget* self,
+                                                     IDataObject* data,
+                                                     DWORD keyState,
+                                                     POINTL pt,
+                                                     DWORD* effect)
+{
+    _GLFWdropTargetWin32* dt = (_GLFWdropTargetWin32*) self;
+    FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    int xpos, ypos;
+
+    dt->hasFiles = data && data->lpVtbl->QueryGetData(data, &fmt) == S_OK;
+
+    dropTargetClientPos(dt->window, pt, &xpos, &ypos);
+    _glfwInputCursorPos(dt->window, xpos, ypos);
+    _glfwInputDrag(dt->window, GLFW_DRAG_ENTER, xpos, ypos);
+
+    *effect = dt->hasFiles ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE dropTargetDragOver(IDropTarget* self,
+                                                    DWORD keyState,
+                                                    POINTL pt,
+                                                    DWORD* effect)
+{
+    _GLFWdropTargetWin32* dt = (_GLFWdropTargetWin32*) self;
+    int xpos, ypos;
+
+    dropTargetClientPos(dt->window, pt, &xpos, &ypos);
+    _glfwInputCursorPos(dt->window, xpos, ypos);
+    _glfwInputDrag(dt->window, GLFW_DRAG_OVER, xpos, ypos);
+
+    *effect = dt->hasFiles ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE dropTargetDragLeave(IDropTarget* self)
+{
+    _GLFWdropTargetWin32* dt = (_GLFWdropTargetWin32*) self;
+
+    _glfwInputDrag(dt->window, GLFW_DRAG_LEAVE, 0, 0);
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE dropTargetDrop(IDropTarget* self,
+                                                IDataObject* data,
+                                                DWORD keyState,
+                                                POINTL pt,
+                                                DWORD* effect)
+{
+    _GLFWdropTargetWin32* dt = (_GLFWdropTargetWin32*) self;
+    FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    STGMEDIUM stg;
+    int xpos, ypos;
+
+    dropTargetClientPos(dt->window, pt, &xpos, &ypos);
+    _glfwInputCursorPos(dt->window, xpos, ypos);
+
+    *effect = DROPEFFECT_NONE;
+
+    if (data && data->lpVtbl->GetData(data, &fmt, &stg) == S_OK)
+    {
+        HDROP drop = (HDROP) stg.hGlobal;
+        int i;
+
+        const int count = DragQueryFileW(drop, 0xffffffff, NULL, 0);
+        char** paths = _glfw_calloc(count, sizeof(char*));
+
+        for (i = 0;  i < count;  i++)
+        {
+            const UINT length = DragQueryFileW(drop, i, NULL, 0);
+            WCHAR* buffer = _glfw_calloc((size_t) length + 1, sizeof(WCHAR));
+
+            DragQueryFileW(drop, i, buffer, length + 1);
+            paths[i] = _glfwCreateUTF8FromWideStringWin32(buffer);
+
+            _glfw_free(buffer);
+        }
+
+        _glfwInputDrop(dt->window, count, (const char**) paths);
+
+        for (i = 0;  i < count;  i++)
+            _glfw_free(paths[i]);
+        _glfw_free(paths);
+
+        ReleaseStgMedium(&stg);
+        *effect = DROPEFFECT_COPY;
+    }
+    else
+    {
+        // The drop carried nothing we deliver (no CF_HDROP): the drag is over
+        // but no drop callback will fire, so release the hover highlight.
+        _glfwInputDrag(dt->window, GLFW_DRAG_LEAVE, 0, 0);
+    }
+
+    return S_OK;
+}
+
+static IDropTargetVtbl dropTargetVtbl =
+{
+    dropTargetQueryInterface,
+    dropTargetAddRef,
+    dropTargetRelease,
+    dropTargetDragEnter,
+    dropTargetDragOver,
+    dropTargetDragLeave,
+    dropTargetDrop
+};
+
+// Registers the OLE drop target for the window, falling back to the legacy
+// WM_DROPFILES path (drop-only, no hover feedback) when OLE is unavailable.
+//
+static void registerDropTargetWin32(_GLFWwindow* window)
+{
+    _GLFWdropTargetWin32* dt;
+
+    if (_glfw.win32.oleInitialized)
+    {
+        dt = _glfw_calloc(1, sizeof(_GLFWdropTargetWin32));
+        dt->idt.lpVtbl = &dropTargetVtbl;
+        dt->refcount = 1;
+        dt->window = window;
+
+        if (SUCCEEDED(RegisterDragDrop(window->win32.handle, &dt->idt)))
+        {
+            window->win32.dropTarget = dt;
+            return;
+        }
+
+        _glfw_free(dt);
+    }
+
+    DragAcceptFiles(window->win32.handle, TRUE);
+}
+
 // Creates the GLFW window
 //
 static int createNativeWindow(_GLFWwindow* window,
@@ -1872,7 +2065,7 @@ static int createNativeWindow(_GLFWwindow* window,
         }
     }
 
-    DragAcceptFiles(window->win32.handle, TRUE);
+    registerDropTargetWin32(window);
 
     if (fbconfig->transparent)
     {
@@ -1963,6 +2156,14 @@ void _glfwDestroyWindowWin32(_GLFWwindow* window)
 
     if (window->win32.handle)
     {
+        if (window->win32.dropTarget)
+        {
+            IDropTarget* idt = (IDropTarget*) window->win32.dropTarget;
+            RevokeDragDrop(window->win32.handle);
+            idt->lpVtbl->Release(idt);
+            window->win32.dropTarget = NULL;
+        }
+
         RemovePropW(window->win32.handle, L"GLFW");
         DestroyWindow(window->win32.handle);
         window->win32.handle = NULL;

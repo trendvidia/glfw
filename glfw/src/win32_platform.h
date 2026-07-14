@@ -66,6 +66,9 @@
 
 #include <wctype.h>
 #include <windows.h>
+// OLE drag-and-drop (drop-target hover feedback, #708/#926); included
+// explicitly because WIN32_LEAN_AND_MEAN strips it from windows.h
+#include <ole2.h>
 #include <dinput.h>
 #include <xinput.h>
 #include <dbt.h>
@@ -458,6 +461,11 @@ typedef struct _GLFWwindowWin32
     int                 lastCursorPosX, lastCursorPosY;
     // The last received high surrogate when decoding pairs of UTF-16 messages
     WCHAR               highSurrogate;
+
+    // OLE drop target delivering drag-motion hover feedback (#708/#926);
+    // NULL when RegisterDragDrop failed and the window fell back to
+    // WM_DROPFILES (drop-only, no hover)
+    void*               dropTarget;
 } _GLFWwindowWin32;
 
 // Win32-specific global data
@@ -465,6 +473,8 @@ typedef struct _GLFWwindowWin32
 typedef struct _GLFWlibraryWin32
 {
     HINSTANCE           instance;
+    // Whether OleInitialize succeeded (drag-and-drop hover needs OLE)
+    GLFWbool            oleInitialized;
     HWND                helperWindowHandle;
     ATOM                helperWindowClass;
     ATOM                mainWindowClass;
