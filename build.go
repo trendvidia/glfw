@@ -9,7 +9,7 @@ package glfw
 #cgo windows CFLAGS: -D_GLFW_WIN32 -Iglfw/deps/mingw
 
 // Linker Options:
-#cgo windows LDFLAGS: -lgdi32
+#cgo windows LDFLAGS: -lgdi32 -lole32 -luuid
 
 #cgo !gles2,windows LDFLAGS: -lopengl32
 #cgo gles2,windows LDFLAGS: -lGLESv2

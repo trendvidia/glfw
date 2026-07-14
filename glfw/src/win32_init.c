@@ -735,6 +735,11 @@ int _glfwInitWin32(void)
     if (!createHelperWindow())
         return GLFW_FALSE;
 
+    // Drag-motion hover feedback (#708/#926) registers an OLE drop target per
+    // window; OLE requires a single-threaded apartment on this (the event)
+    // thread. Failure is not fatal: windows fall back to WM_DROPFILES.
+    _glfw.win32.oleInitialized = SUCCEEDED(OleInitialize(NULL));
+
     _glfwPollMonitorsWin32();
     return GLFW_TRUE;
 }
@@ -753,6 +758,12 @@ void _glfwTerminateWin32(void)
         UnregisterClassW(MAKEINTATOM(_glfw.win32.helperWindowClass), _glfw.win32.instance);
     if (_glfw.win32.mainWindowClass)
         UnregisterClassW(MAKEINTATOM(_glfw.win32.mainWindowClass), _glfw.win32.instance);
+
+    if (_glfw.win32.oleInitialized)
+    {
+        OleUninitialize();
+        _glfw.win32.oleInitialized = GLFW_FALSE;
+    }
 
     _glfw_free(_glfw.win32.clipboardString);
     _glfw_free(_glfw.win32.rawInput);
